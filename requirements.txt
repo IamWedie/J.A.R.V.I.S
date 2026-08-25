@@ -25,3 +25,4 @@ openwakeword
 onnxruntime
 speakeronnx
 imageio-ffmpeg
+zeroconf
