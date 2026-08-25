@@ -73,6 +73,12 @@ def preload():
         asyncio.run(brain.fetch_models())
     except Exception as e:
         print(f"(startup notice: {e})")
+    try:
+        from core.stt import transcriber
+        transcriber.preload()
+        print("whisper preloaded")
+    except Exception as e:
+        print(f"(whisper preload notice: {e})")
 
 
 def set_taskbar_icon():

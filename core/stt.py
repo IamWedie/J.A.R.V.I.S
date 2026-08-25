@@ -34,7 +34,14 @@ class Transcriber:
         if duration < 0.6:
             return ""
         model = self._load()
-        segments, info = model.transcribe(audio_float32, language="en", beam_size=1, vad_filter=True)
+        segments, info = model.transcribe(
+            audio_float32,
+            language="en",
+            beam_size=1,
+            vad_filter=True,
+            without_timestamps=True,
+            condition_on_previous_text=False,
+        )
         return " ".join(s.text.strip() for s in segments).strip()
 
 

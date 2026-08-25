@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 from datetime import datetime
 
@@ -312,27 +313,72 @@ class Brain:
             )
         return self.client
 
-    FALLBACK_MODELS = ["big-pickle", "nemotron-3.5-lightning-free"]
+    FALLBACK_MODELS = ["laguna-s-2.1-free", "big-pickle", "nemotron-3.5-lightning-free"]
 
-    async def _completion(self, messages, tools):
+    async def _stream_round(self, messages, tools, on_chunk=None):
         client = self._ensure_client()
         candidates = [self.model] + [m for m in self.FALLBACK_MODELS if m != self.model]
         last_error = None
         for i, model in enumerate(candidates):
             try:
-                response = await client.chat.completions.create(
+                stream = await client.chat.completions.create(
                     model=model,
                     messages=messages,
                     tools=tools,
                     temperature=0.4,
+                    stream=True,
                 )
-                if i > 0:
-                    print(f"(switched brain to {model})")
-                    self.model = model
-                return response
             except Exception as e:
                 last_error = e
                 continue
+            if i > 0:
+                print(f"(switched brain to {model})")
+                self.model = model
+            content_parts = []
+            tool_acc = {}
+            try:
+                async with stream:
+                    async for chunk in stream:
+                        if not chunk.choices:
+                            continue
+                        delta = chunk.choices[0].delta
+                        if delta is None:
+                            continue
+                        if delta.content:
+                            content_parts.append(delta.content)
+                            if on_chunk:
+                                try:
+                                    await on_chunk(delta.content)
+                                except Exception:
+                                    pass
+                        if delta.tool_calls:
+                            for tc in delta.tool_calls:
+                                idx = tc.index if tc.index is not None else 0
+                                acc = tool_acc.setdefault(idx, {"id": "", "name": "", "args": ""})
+                                if tc.id:
+                                    acc["id"] = tc.id
+                                if tc.function:
+                                    if tc.function.name:
+                                        acc["name"] += tc.function.name
+                                    if tc.function.arguments:
+                                        acc["args"] += tc.function.arguments
+            except Exception as e:
+                print(f"stream interrupted on {model}: {e}")
+                with contextlib.suppress(Exception):
+                    await stream.close()
+                raise
+            content = "".join(content_parts)
+            if tool_acc:
+                calls = []
+                for idx in sorted(tool_acc):
+                    acc = tool_acc[idx]
+                    calls.append({
+                        "id": acc["id"] or f"call_{idx}",
+                        "type": "function",
+                        "function": {"name": acc["name"], "arguments": acc["args"] or "{}"},
+                    })
+                return content, calls
+            return content, None
         raise last_error
 
     async def fetch_models(self):
@@ -355,8 +401,7 @@ class Brain:
     def reset_history(self):
         self.history = []
 
-    async def ask(self, user_text):
-        client = self._ensure_client()
+    async def ask(self, user_text, on_chunk=None):
         system_message = {
             "role": "system",
             "content": SYSTEM_PROMPT + f"\nCurrent date and time: {datetime.now():%A %d %B %Y, %H:%M}." + _memory_context(user_text),
@@ -368,10 +413,10 @@ class Brain:
 
         for round_index in range(MAX_TOOL_ROUNDS):
             use_tools = TOOLS if round_index < FORCE_ANSWER_AT_ROUND else None
-            response = await self._completion(messages, use_tools)
-            msg = response.choices[0].message
-            if not msg.tool_calls:
-                reply = msg.content or ""
+            content, tool_calls = await self._stream_round(messages, use_tools, on_chunk)
+
+            if not tool_calls:
+                reply = content or ""
                 self.history.append({"role": "user", "content": user_text})
                 self.history.append({"role": "assistant", "content": reply})
                 try:
@@ -383,36 +428,47 @@ class Brain:
                     self.history = self.history[-40:]
                 return reply
 
-            messages.append(msg.model_dump(exclude_none=True))
-            for call in msg.tool_calls:
-                fn = TOOL_FUNCTIONS.get(call.function.name)
+            messages.append({
+                "role": "assistant",
+                "content": content or None,
+                "tool_calls": tool_calls,
+            })
+
+            async def execute_one(call):
+                fn = TOOL_FUNCTIONS.get(call["function"]["name"])
                 try:
-                    args = json.loads(call.function.arguments or "{}")
+                    args = json.loads(call["function"]["arguments"] or "{}")
                 except json.JSONDecodeError:
                     args = {}
+                name = call["function"]["name"]
                 if fn is None:
-                    result = f"Unknown tool: {call.function.name}"
-                elif call.function.name in APPROVAL_REQUIRED:
-                    approved = await self.request_approval(call.function.name, args)
-                    if approved:
-                        try:
-                            result = await asyncio.to_thread(fn, **args)
-                        except Exception as e:
-                            result = f"Tool error: {e}"
-                    else:
-                        result = "The user DENIED this action. Do not retry it."
-                else:
-                    try:
-                        result = await asyncio.to_thread(fn, **args)
-                    except Exception as e:
-                        result = f"Tool error: {e}"
-                call_key = (call.function.name, json.dumps(args, sort_keys=True))
+                    return call, f"Unknown tool: {name}"
+                if name in APPROVAL_REQUIRED:
+                    approved = await self.request_approval(name, args)
+                    if not approved:
+                        return call, "The user DENIED this action. Do not retry it."
+                try:
+                    return call, await asyncio.to_thread(fn, **args)
+                except Exception as e:
+                    return call, f"Tool error: {e}"
+
+            normal = [c for c in tool_calls if c["function"]["name"] not in APPROVAL_REQUIRED]
+            gated = [c for c in tool_calls if c["function"]["name"] in APPROVAL_REQUIRED]
+
+            results = []
+            if normal:
+                results.extend(await asyncio.gather(*(execute_one(c) for c in normal)))
+            for c in gated:
+                results.append(await execute_one(c))
+
+            for call, result in results:
+                call_key = (call["function"]["name"], call["function"]["arguments"])
                 if call_key == last_call_key:
                     result = f"{result}\n(Already provided. Answer now.)"
                 last_call_key = call_key
                 messages.append({
                     "role": "tool",
-                    "tool_call_id": call.id,
+                    "tool_call_id": call["id"],
                     "content": str(result),
                 })
 

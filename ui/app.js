@@ -145,8 +145,18 @@ function onMessage(ev) {
         case 'user_said':
             addMsg(msg.text, 'user');
             break;
+        case 'reply_chunk':
+            if (!liveBubble) liveBubble = addMsg('', 'jarvis');
+            liveBubble.textContent += msg.text;
+            chatlog.scrollTop = chatlog.scrollHeight;
+            break;
         case 'reply':
-            if (msg.text) addMsg(msg.text, 'jarvis');
+            if (liveBubble) {
+                if (msg.text) liveBubble.textContent = msg.text;
+                liveBubble = null;
+            } else if (msg.text) {
+                addMsg(msg.text, 'jarvis');
+            }
             break;
         case 'approval_request':
             approvalText.textContent = 'JARVIS wants to: ' + msg.description;
@@ -154,6 +164,7 @@ function onMessage(ev) {
             break;
         case 'cleared':
             chatlog.innerHTML = '';
+            liveBubble = null;
             break;
         case 'memory_wiped':
             addMsg('Memory wiped. I remember nothing, sir.', 'jarvis');
@@ -211,7 +222,10 @@ function addMsg(text, who) {
     div.textContent = text;
     chatlog.appendChild(div);
     chatlog.scrollTop = chatlog.scrollHeight;
+    return div;
 }
+
+let liveBubble = null;
 
 micBtn.addEventListener('click', () => send({ cmd: 'listen' }));
 

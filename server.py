@@ -30,8 +30,8 @@ main_loop = None
 listening_paused = False
 
 SILENCE_THRESHOLD = 0.008
-SILENCE_DURATION = 1.5
-MAX_RECORD_SECONDS = 15
+SILENCE_DURATION = 0.7
+MAX_RECORD_SECONDS = 12
 
 _chime_audio = None
 
@@ -210,15 +210,28 @@ async def api_memory_stats():
 
 async def think_and_speak(user_text):
     await set_state("thinking")
+    text_q = asyncio.Queue()
+    speak_task = asyncio.create_task(speaker.speak_from_queue(text_q))
+    parts = []
+
+    async def on_chunk(chunk):
+        parts.append(chunk)
+        await send_event({"type": "reply_chunk", "text": chunk})
+        await text_q.put(chunk)
+        if current_state == "thinking":
+            asyncio.create_task(set_state("speaking"))
+
     try:
-        reply = await brain.ask(user_text)
+        reply = await brain.ask(user_text, on_chunk=on_chunk)
     except Exception as e:
         await send_event({"type": "error", "message": str(e)})
         reply = "Sorry sir, something went wrong."
-    await send_event({"type": "reply", "text": reply})
-    if reply:
-        await set_state("speaking")
-        await speaker.speak(reply)
+    if reply and not parts:
+        await text_q.put(reply)
+    await text_q.put(None)
+    full_reply = "".join(parts) or reply
+    await send_event({"type": "reply", "text": full_reply})
+    await speak_task
     await set_state("idle")
 
 
@@ -252,9 +265,13 @@ async def voice_pipeline(play_intro):
     async with processing_lock:
         speaker.stop()
         await set_state("listening")
-        if play_intro:
-            await play_chime()
+        chime_task = asyncio.create_task(play_chime()) if play_intro else None
         audio = await capture_command()
+        if chime_task:
+            try:
+                await chime_task
+            except Exception:
+                pass
 
         if audio is None or len(audio) / SAMPLE_RATE < 0.6:
             await set_state("idle")
