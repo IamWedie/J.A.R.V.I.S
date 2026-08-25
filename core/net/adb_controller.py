@@ -837,3 +837,31 @@ def grant_permission(package, permission):
 def revoke_permission(package, permission):
     _shell_raw(f"pm revoke {package} {permission}")
     return f"Revoked {permission} from {package}."
+
+
+def notify(title, message):
+    _shell_raw(f'am broadcast -a android.intent.action.BOOT_COMPLETED --es title "{title}" --es message "{message}" 2>/dev/null')
+    _shell_raw(f'cmd notification post -S bigtext -t "{title}" "jarvis" "{message}" 2>/dev/null')
+    return f"Notification sent: {title} — {message}"
+
+
+def vibrate(ms=500):
+    _shell_raw(f"input vibrationtime {ms}")
+    return f"Vibrated {ms}ms."
+
+
+def play_completion_sound():
+    try:
+        import winsound
+        winsound.Beep(800, 150)
+        time.sleep(0.1)
+        winsound.Beep(1000, 150)
+        time.sleep(0.1)
+        winsound.Beep(1200, 200)
+    except Exception:
+        pass
+
+
+def phone_call(number):
+    _shell_raw(f"am start -a android.intent.action.CALL -d tel:{number}")
+    return f"Calling {number}."

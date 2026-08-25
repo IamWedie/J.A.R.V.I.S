@@ -10,6 +10,7 @@ from core import memory
 from core import netdiscovery
 from core.net import cast_controller
 from core.net import adb_controller
+from core.net import agent as phone_agent
 from core.tools import pc_tools, web_tools
 
 SYSTEM_PROMPT = (
@@ -32,6 +33,9 @@ SYSTEM_PROMPT = (
     "unlock with PIN, take photos/selfies with flash, open/close any app, read/send SMS, make calls, "
     "browse files, toggle WiFi/Bluetooth/airplane, control volume/brightness, reboot, read notifications, "
     "share clipboard, and tap/swipe/type anything. Always use phone_unlock_with_pin when user asks to unlock.\n"
+    "- For complex multi-step phone tasks (e.g. 'take a selfie and send it', 'open YouTube and play a video', "
+    "'set an alarm'), use phone_agent — it autonomously takes screenshots, reads the screen, and executes "
+    "the needed taps/swipes/types to accomplish the goal.\n"
     "- Never mention tools, JSON, or result mechanics; speak naturally."
 )
 
@@ -464,6 +468,13 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
+        "name": "phone_agent",
+        "description": "Autonomously perform a multi-step task on the phone. JARVIS will take screenshots, read the screen, and execute taps/swipes/types to accomplish the goal. Use for complex tasks like 'take a selfie and send it', 'set an alarm for 7am', 'open Instagram and like the first post'.",
+        "parameters": {"type": "object", "properties": {
+            "goal": {"type": "string", "description": "The multi-step task to accomplish on the phone"},
+        }, "required": ["goal"]},
+    }},
+    {"type": "function", "function": {
         "name": "remember_fact",
         "description": "Store a permanent fact in local memory (e.g. 'My sister's name is Lina').",
         "parameters": {"type": "object", "properties": {
@@ -573,6 +584,7 @@ TOOL_FUNCTIONS = {
     "phone_reboot": adb_controller.reboot,
     "phone_shutdown": adb_controller.shutdown,
     "phone_contacts": adb_controller.list_contacts,
+    "phone_agent": lambda goal: _run_agent(goal),
     "lock_screen": pc_tools.lock_screen,
     "sleep_pc": pc_tools.sleep_pc,
 }
@@ -592,6 +604,25 @@ def _recall_memories(query):
     if not parts:
         return "Nothing found in memory about that."
     return "\n".join(parts)
+
+
+async def _run_agent_async(goal):
+    steps = await phone_agent.agent_task(goal, max_steps=12)
+    actions = [s for s in steps if s["status"] == "action"]
+    done = next((s for s in steps if s["status"] == "done"), None)
+    fail = next((s for s in steps if s["status"] in ("fail", "error")), None)
+    if done:
+        return f"Agent completed the task in {len(actions)} steps: {done['message']}"
+    if fail:
+        return f"Agent failed after {len(actions)} steps: {fail['message']}"
+    return f"Agent performed {len(actions)} steps but did not complete the task."
+
+
+def _run_agent(goal):
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        future = pool.submit(asyncio.run, _run_agent_async(goal))
+        return future.result(timeout=180)
 
 
 def _memory_context(user_text):
@@ -697,11 +728,9 @@ class Brain:
             )
         return self.client
 
-    FALLBACK_MODELS = ["laguna-s-2.1-free", "big-pickle", "nemotron-3.5-lightning-free"]
-
     async def _stream_round(self, messages, tools, on_chunk=None):
         client = self._ensure_client()
-        candidates = [self.model] + [m for m in self.FALLBACK_MODELS if m != self.model]
+        candidates = [self.model] + [m for m in FALLBACK_MODELS if m != self.model]
         last_error = None
         for i, model in enumerate(candidates):
             try:
@@ -878,3 +907,53 @@ class Brain:
     def resolve_approval(self, approved):
         if self.approval_future and not self.approval_future.done():
             self.approval_future.set_result(bool(approved))
+
+
+FALLBACK_MODELS = ["laguna-s-2.1-free", "big-pickle", "nemotron-3.5-lightning-free"]
+
+
+async def ask_vision(goal, screenshot_b64, context=""):
+    from openai import AsyncOpenAI
+    client = AsyncOpenAI(
+        base_url=config.ZEN_BASE_URL,
+        api_key=config.ZEN_API_KEY,
+        timeout=60,
+    )
+    model = config.DEFAULT_MODEL or "mimo-v2.5-free"
+    models = [model] + [m for m in FALLBACK_MODELS if m != model]
+    messages = [
+        {"role": "system", "content": (
+            "You are an Android phone agent controlling an Honor LLY-LX2 (1080x2412). "
+            "You see a screenshot of the phone screen. The user wants you to accomplish a goal. "
+            "Respond with EXACTLY ONE action in this format:\n\n"
+            "ACTION: <action_name> <args>\nREASON: <brief reason>\n\n"
+            "Available actions:\n"
+            "- tap <x> <y> — tap at screen coordinates\n"
+            "- swipe <x1> <y1> <x2> <y2> — swipe gesture\n"
+            "- type <text> — type text into focused field\n"
+            "- press_home — go to home screen\n"
+            "- press_back — go back\n"
+            "- done <message> — task is complete, include what happened\n"
+            "- fail <reason> — cannot complete\n\n"
+            "RULES:\n"
+            "- Only output ONE action\n"
+            "- Be precise with coordinates for 1080x2412 screen\n"
+            "- Shutter button is at ~(540, 2200)\n"
+            "- Flash toggle is at ~(150, 150)\n"
+            "- Camera switch is at ~(950, 150)\n"
+            "- Status bar is ~0-100px from top\n"
+            "- Navigation bar is ~2300-2412px from top\n"
+            "- Common keyboard OK/Enter is at ~(900, 2100)\n"
+        )},
+        {"role": "user", "content": [
+            {"type": "text", "text": f"Goal: {goal}\n{context}"},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{screenshot_b64}"}},
+        ]},
+    ]
+    for m in models:
+        try:
+            resp = await client.chat.completions.create(model=m, messages=messages, max_tokens=200)
+            return resp.choices[0].message.content.strip()
+        except Exception:
+            continue
+    return "fail: all vision models unavailable"
