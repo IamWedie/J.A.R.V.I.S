@@ -9,7 +9,7 @@ from core.net.adb_controller import (
     home, back, tap, swipe, swipe_up, swipe_down,
     type_text, open_app, current_activity,
     open_camera, take_photo, take_selfie, switch_camera, toggle_flash,
-    notify, vibrate, play_completion_sound,
+    notify, vibrate, play_completion_sound, get_camera_facing,
 )
 
 
@@ -108,13 +108,15 @@ def _smart_action(goal, pkg):
         if "camera" not in pkg:
             open_camera()
             time.sleep(2)
-        switch_camera()
-        time.sleep(0.5)
+        facing = get_camera_facing()
+        if facing != "front":
+            switch_camera()
+            time.sleep(1.0)
         if "flash" in goal_lower:
             toggle_flash()
-            time.sleep(0.3)
+            time.sleep(0.5)
         take_selfie()
-        return "done", "Took selfie" + (" with flash" if "flash" in goal_lower else "")
+        return "done", "Took selfie" + (" with flash" if "flash" in goal_lower else "") + f" (was {facing} camera)"
 
     if "camera" in goal_lower and ("photo" in goal_lower or "picture" in goal_lower or "take" in goal_lower):
         if "camera" not in pkg:

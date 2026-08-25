@@ -397,8 +397,8 @@ def take_selfie():
 
 
 def toggle_flash():
-    _shell("input tap 150 150")
-    time.sleep(0.3)
+    _shell_raw("am broadcast -a com.hihonor.camera.FLASH_TOGGLE")
+    time.sleep(0.5)
     return "Flash toggled."
 
 
@@ -413,9 +413,20 @@ def flash_off():
 
 
 def switch_camera():
-    _shell("input tap 950 150")
-    time.sleep(0.5)
+    _shell("input tap 150 950")
+    time.sleep(1.0)
     return "Camera switched."
+
+
+def get_camera_facing():
+    out = _shell_raw("dumpsys media.camera")
+    for line in out.splitlines():
+        if "CONNECT device" in line and "honor.camera" in line:
+            if "device 1" in line:
+                return "front"
+            elif "device 0" in line:
+                return "back"
+    return "unknown"
 
 
 def record_video(seconds=10):
