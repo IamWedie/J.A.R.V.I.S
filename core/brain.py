@@ -8,6 +8,8 @@ from openai import AsyncOpenAI
 import core.config as config
 from core import memory
 from core import netdiscovery
+from core.net import cast_controller
+from core.net import adb_controller
 from core.tools import pc_tools, web_tools
 
 SYSTEM_PROMPT = (
@@ -24,6 +26,10 @@ SYSTEM_PROMPT = (
     "To look up past conversations or personal details, call recall_memories. Never claim you cannot remember.\n"
     "- You can see the user's WiFi network: use list_network_devices when they ask what devices are connected, "
     "and where_is_device to check if a specific device (TV, phone, laptop) is home.\n"
+    "- You can cast YouTube videos and web content to Chromecast/Google TV devices: use cast_youtube for YouTube, "
+    "cast_url for any web video. Use list_cast_devices to discover available targets.\n"
+    "- The user's phone (Huawei, Android 14) is connected via wireless ADB. You can take screenshots, open/close apps, "
+    "tap/swipe the screen, type text, open URLs, check battery, control volume. Use phone_info to confirm connection.\n"
     "- Never mention tools, JSON, or result mechanics; speak naturally."
 )
 
@@ -132,18 +138,62 @@ TOOLS = [
         }, "required": ["url"]},
     }},
     {"type": "function", "function": {
-        "name": "web_search",
-        "description": "Search the web for current information.",
+        "name": "where_is_device",
+        "description": "Check whether a specific device (by name, brand or type like 'tv' or 'samsung') is present on the network.",
         "parameters": {"type": "object", "properties": {
-            "query": {"type": "string"},
-        }, "required": ["query"]},
+            "name": {"type": "string"},
+        }, "required": ["name"]},
     }},
     {"type": "function", "function": {
-        "name": "remember_fact",
-        "description": "Store a permanent fact in local memory (e.g. 'My sister's name is Lina').",
+        "name": "cast_youtube",
+        "description": "Play a YouTube video on a Chromecast or Google TV. Pass the URL or video ID.",
         "parameters": {"type": "object", "properties": {
-            "fact": {"type": "string"},
-        }, "required": ["fact"]},
+            "url": {"type": "string", "description": "YouTube URL or 11-char video ID"},
+            "target": {"type": "string", "description": "Device name (e.g. 'Living Room TV'). Omit to pick first available."},
+        }, "required": ["url"]},
+    }},
+    {"type": "function", "function": {
+        "name": "cast_url",
+        "description": "Cast any web video or media URL to a Chromecast/Google TV.",
+        "parameters": {"type": "object", "properties": {
+            "url": {"type": "string"},
+            "target": {"type": "string", "description": "Device name. Omit to pick first available."},
+        }, "required": ["url"]},
+    }},
+    {"type": "function", "function": {
+        "name": "stop_cast",
+        "description": "Stop whatever is playing on a Chromecast/Google TV.",
+        "parameters": {"type": "object", "properties": {
+            "target": {"type": "string", "description": "Device name. Omit for first available."},
+        }},
+    }},
+    {"type": "function", "function": {
+        "name": "pause_cast",
+        "description": "Pause playback on a Chromecast/Google TV.",
+        "parameters": {"type": "object", "properties": {
+            "target": {"type": "string", "description": "Device name. Omit for first available."},
+        }},
+    }},
+    {"type": "function", "function": {
+        "name": "resume_cast",
+        "description": "Resume paused playback on a Chromecast/Google TV.",
+        "parameters": {"type": "object", "properties": {
+            "target": {"type": "string", "description": "Device name. Omit for first available."},
+        }},
+    }},
+    {"type": "function", "function": {
+        "name": "cast_status",
+        "description": "Check what's currently playing on a Chromecast/Google TV.",
+        "parameters": {"type": "object", "properties": {
+            "target": {"type": "string", "description": "Device name. Omit for first available."},
+        }},
+    }},
+    {"type": "function", "function": {
+        "name": "list_cast_devices",
+        "description": "Discover Chromecast and Google TV devices on the network.",
+        "parameters": {"type": "object", "properties": {
+            "refresh": {"type": "boolean", "description": "true to force re-discovery"},
+        }},
     }},
     {"type": "function", "function": {
         "name": "list_network_devices",
@@ -158,6 +208,107 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {
             "name": {"type": "string"},
         }, "required": ["name"]},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_info",
+        "description": "Get the connected phone's model, Android version, battery level and screen resolution.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_screenshot",
+        "description": "Take a screenshot of the connected phone's screen.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_home",
+        "description": "Press the home button on the connected phone.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_back",
+        "description": "Press the back button on the connected phone.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_tap",
+        "description": "Tap a specific point on the phone screen by x,y coordinates (1080x2412 resolution).",
+        "parameters": {"type": "object", "properties": {
+            "x": {"type": "integer"},
+            "y": {"type": "integer"},
+        }, "required": ["x", "y"]},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_swipe",
+        "description": "Swipe on the phone screen from (x1,y1) to (x2,y2).",
+        "parameters": {"type": "object", "properties": {
+            "x1": {"type": "integer"}, "y1": {"type": "integer"},
+            "x2": {"type": "integer"}, "y2": {"type": "integer"},
+        }, "required": ["x1", "y1", "x2", "y2"]},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_type",
+        "description": "Type text on the connected phone (the active text field must be focused).",
+        "parameters": {"type": "object", "properties": {
+            "text": {"type": "string"},
+        }, "required": ["text"]},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_open_app",
+        "description": "Open an app on the phone by package name.",
+        "parameters": {"type": "object", "properties": {
+            "package": {"type": "string", "description": "e.g. 'com.whatsapp', 'com.instagram.android'"},
+        }, "required": ["package"]},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_close_app",
+        "description": "Force-stop an app on the phone.",
+        "parameters": {"type": "object", "properties": {
+            "package": {"type": "string"},
+        }, "required": ["package"]},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_list_apps",
+        "description": "List all third-party apps installed on the connected phone.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_open_url",
+        "description": "Open a URL on the connected phone's browser.",
+        "parameters": {"type": "object", "properties": {
+            "url": {"type": "string"},
+        }, "required": ["url"]},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_screen_on",
+        "description": "Wake up the phone screen.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_screen_off",
+        "description": "Turn off the phone screen.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_volume_up",
+        "description": "Increase phone volume.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_volume_down",
+        "description": "Decrease phone volume.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_battery",
+        "description": "Check phone battery level and charging status.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "remember_fact",
+        "description": "Store a permanent fact in local memory (e.g. 'My sister's name is Lina').",
+        "parameters": {"type": "object", "properties": {
+            "fact": {"type": "string"},
+        }, "required": ["fact"]},
     }},
     {"type": "function", "function": {
         "name": "forget_fact",
@@ -210,6 +361,29 @@ TOOL_FUNCTIONS = {
         netdiscovery.get_devices(force=bool(refresh))
     ),
     "where_is_device": lambda name: netdiscovery.format_devices(netdiscovery.find_device(name)),
+    "cast_youtube": cast_controller.cast_youtube,
+    "cast_url": cast_controller.cast_url,
+    "stop_cast": cast_controller.stop_cast,
+    "pause_cast": cast_controller.pause_cast,
+    "resume_cast": cast_controller.resume_cast,
+    "cast_status": cast_controller.cast_status,
+    "list_cast_devices": lambda refresh=False: cast_controller.list_devices(refresh=bool(refresh)),
+    "phone_info": adb_controller.device_info,
+    "phone_screenshot": adb_controller.screenshot,
+    "phone_home": adb_controller.home,
+    "phone_back": adb_controller.back,
+    "phone_tap": adb_controller.tap,
+    "phone_swipe": adb_controller.swipe,
+    "phone_type": adb_controller.type_text,
+    "phone_open_app": adb_controller.open_app,
+    "phone_close_app": adb_controller.close_app,
+    "phone_list_apps": adb_controller.list_apps,
+    "phone_open_url": adb_controller.open_url,
+    "phone_screen_on": adb_controller.screen_on,
+    "phone_screen_off": adb_controller.screen_off,
+    "phone_volume_up": adb_controller.volume_up,
+    "phone_volume_down": adb_controller.volume_down,
+    "phone_battery": adb_controller.battery,
     "lock_screen": pc_tools.lock_screen,
     "sleep_pc": pc_tools.sleep_pc,
 }

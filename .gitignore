@@ -23,6 +23,9 @@ owner_voice.npy
 # Copyrighted personal assets
 assets/
 
+# Android SDK tools (download separately)
+platform-tools/
+
 # OS junk
 Thumbs.db
 .DS_Store
