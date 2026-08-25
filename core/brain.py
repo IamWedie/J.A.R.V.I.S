@@ -225,6 +225,11 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
+        "name": "phone_unlock",
+        "description": "Wake and swipe to unlock the phone. Note: cannot bypass PIN/pattern locks.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
         "name": "phone_back",
         "description": "Press the back button on the connected phone.",
         "parameters": {"type": "object", "properties": {}},
@@ -254,10 +259,15 @@ TOOLS = [
     }},
     {"type": "function", "function": {
         "name": "phone_open_app",
-        "description": "Open an app on the phone by package name.",
+        "description": "Open an app on the phone by package name. Use 'camera' to open the camera.",
         "parameters": {"type": "object", "properties": {
-            "package": {"type": "string", "description": "e.g. 'com.whatsapp', 'com.instagram.android'"},
+            "package": {"type": "string", "description": "e.g. 'com.whatsapp', 'com.instagram.android', 'camera'"},
         }, "required": ["package"]},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_open_camera",
+        "description": "Open the phone's camera app directly.",
+        "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
         "name": "phone_close_app",
@@ -372,10 +382,12 @@ TOOL_FUNCTIONS = {
     "phone_screenshot": adb_controller.screenshot,
     "phone_home": adb_controller.home,
     "phone_back": adb_controller.back,
+    "phone_unlock": adb_controller.unlock,
     "phone_tap": adb_controller.tap,
     "phone_swipe": adb_controller.swipe,
     "phone_type": adb_controller.type_text,
     "phone_open_app": adb_controller.open_app,
+    "phone_open_camera": adb_controller.open_camera,
     "phone_close_app": adb_controller.close_app,
     "phone_list_apps": adb_controller.list_apps,
     "phone_open_url": adb_controller.open_url,

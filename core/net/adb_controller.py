@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -22,6 +23,10 @@ def _shell(cmd, timeout=15):
     return _run(["shell"] + cmd.split(), timeout=timeout)
 
 
+def _shell_raw(cmd, timeout=15):
+    return _run(["shell", cmd], timeout=timeout)
+
+
 def connected():
     out = _run(["devices"])
     lines = [l for l in out.splitlines()[1:] if l.strip() and "device" in l]
@@ -41,8 +46,8 @@ def device_info():
     for line in bat.splitlines():
         if "level:" in line:
             level = line.split(":")[-1].strip()
-        if "AC powered:" in line:
-            charging = "charging" if "true" in line.lower() else ""
+        if "AC powered:" in line and "true" in line.lower():
+            charging = "charging"
         if "USB powered:" in line and "true" in line.lower():
             charging = "USB charging"
         if "Wireless powered:" in line and "true" in line.lower():
@@ -91,7 +96,20 @@ def recent():
 
 def screen_on():
     _shell("input keyevent KEYCODE_WAKEUP")
+    time.sleep(0.3)
+    _shell("input keyevent KEYCODE_MENU")
     return "Screen on."
+
+
+def unlock():
+    _shell("input keyevent KEYCODE_WAKEUP")
+    time.sleep(0.5)
+    _shell("input swipe 540 2000 540 500 300")
+    time.sleep(0.5)
+    lock = _shell_raw("dumpsys window | grep mDreamingLockscreen")
+    if "true" in lock.lower():
+        return "Screen woke but lock screen still showing (PIN/pattern required). I cannot enter security codes."
+    return "Screen unlocked."
 
 
 def screen_off():
@@ -114,13 +132,43 @@ def mute():
     return "Muted."
 
 
+def _resolve_launch_intent(package):
+    out = _shell_raw(f"cmd package resolve-activity --brief {package}")
+    for line in out.splitlines():
+        if "/" in line and not line.startswith("priority"):
+            return line.strip()
+    out2 = _shell_raw(f"pm dump {package} | grep -A1 'android.intent.category.LAUNCHER'")
+    for line in out2.splitlines():
+        if package in line and "/" in line:
+            comp = line.strip().split()[-1]
+            return comp
+    return None
+
+
 def open_app(package):
-    _shell(f"monkey -p {package} -c android.intent.category.LAUNCHER 1")
-    return f"Opened {package}."
+    if package in ("camera", "cam"):
+        return open_camera()
+    comp = _resolve_launch_intent(package)
+    if comp:
+        _shell_raw(f"am start -n {comp}")
+        return f"Opened {package}."
+    _shell_raw(f"monkey -p {package} -c android.intent.category.LAUNCHER 1")
+    return f"Opened {package} (via monkey fallback)."
+
+
+def open_camera():
+    comp = _resolve_launch_intent("com.hihonor.camera")
+    if comp:
+        _shell_raw(f"am start -n {comp}")
+        return "Camera opened."
+    r = _shell_raw("am start -n com.hihonor.camera/.Camera")
+    if "Error" in r:
+        r = _shell_raw("am start -a android.media.action.STILL_IMAGE_CAMERA")
+    return "Camera opened." if "Error" not in r else f"Camera failed: {r}"
 
 
 def close_app(package):
-    _shell(f"am force-stop {package}")
+    _shell_raw(f"am force-stop {package}")
     return f"Closed {package}."
 
 
@@ -144,15 +192,17 @@ def swipe(x1, y1, x2, y2, duration_ms=300):
 
 def type_text(text):
     escaped = text.replace(" ", "%s").replace("&", "\\&").replace("'", "\\'")
-    _shell(f"input text '{escaped}'")
+    _shell_raw(f"input text '{escaped}'")
     return f"Typed: {text}"
 
 
 def open_url(url):
-    _shell(f'am start -a android.intent.action.VIEW -d "{url}"')
+    _shell_raw(f'am start -a android.intent.action.VIEW -d "{url}"')
     return f"Opened {url} on phone."
 
 
 def current_activity():
-    out = _shell("dumpsys activity activities | grep mResumedActivity")
+    out = _shell_raw("dumpsys activity activities | grep -E 'ResumedActivity:|topResumedActivity'")
+    if not out:
+        out = _shell_raw("dumpsys activity activities | grep mResumedActivity")
     return out if out else "Could not determine current activity."
