@@ -66,6 +66,8 @@
         <div class="settingsRow"><span>Voice lock</span><span id="voiceStatus">checking...</span></div>
         <button id="enrollBtn">ENROLL MY VOICE</button>
         <button id="resetVoiceBtn" class="danger">RESET FINGERPRINT</button>
+        <button id="wipeMemoryBtn" class="danger">FORGET EVERYTHING</button>
+        <div class="settingsRow"><span id="memStats"></span></div>
         <div class="settingsRow" style="margin-top:10px"><span>Voice &amp; speed</span></div>
         <select id="voiceSelect"></select>
         <select id="rateSelect">
@@ -79,7 +81,7 @@
         <p class="hint">Enroll = say 3 short phrases. After that JARVIS only obeys this voice via wake word.</p>
     </div>
 
-    <canvas id="face" width="360" height="300"></canvas>
+    <canvas id="face"></canvas>
     <div id="status">Online</div>
 
     <div id="chatlog"></div>

@@ -155,6 +155,14 @@ function onMessage(ev) {
         case 'cleared':
             chatlog.innerHTML = '';
             break;
+        case 'memory_wiped':
+            addMsg('Memory wiped. I remember nothing, sir.', 'jarvis');
+            break;
+        case 'history_batch':
+            for (const item of msg.items) {
+                addMsg(item.text, item.role === 'user' ? 'user' : 'jarvis');
+            }
+            break;
         case 'wake':
             updateWakeBtn(msg.enabled);
             break;
@@ -257,6 +265,20 @@ document.getElementById('enrollBtn').addEventListener('click', () => {
 document.getElementById('resetVoiceBtn').addEventListener('click', () => {
     send({ cmd: 'voice_reset' });
 });
+document.getElementById('wipeMemoryBtn').addEventListener('click', () => {
+    if (confirm('Erase ALL memories and conversations permanently?')) {
+        send({ cmd: 'wipe_memory' });
+    }
+});
+
+async function loadMemoryStats() {
+    try {
+        const res = await fetch('/api/memory_stats');
+        const d = await res.json();
+        document.getElementById('memStats').textContent =
+            `${d.conversations} messages remembered | ${d.facts} facts`;
+    } catch {}
+}
 
 const voiceSelect = document.getElementById('voiceSelect');
 const rateSelect = document.getElementById('rateSelect');
@@ -290,3 +312,4 @@ document.getElementById('testVoiceBtn').addEventListener('click', () => send({ c
 connect();
 loadModels();
 maybeRunSetup();
+loadMemoryStats();

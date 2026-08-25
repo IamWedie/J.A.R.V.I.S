@@ -202,6 +202,12 @@ async def api_terms():
         return {"text": f.read()}
 
 
+@app.get("/api/memory_stats")
+async def api_memory_stats():
+    from core import memory
+    return memory.stats()
+
+
 async def think_and_speak(user_text):
     await set_state("thinking")
     try:
@@ -259,6 +265,11 @@ async def voice_pipeline(play_intro):
             ok = await asyncio.to_thread(_vid.verify, audio)
             if not ok:
                 await send_event({"type": "voice_rejected"})
+                try:
+                    from core import memory
+                    memory.log("event", "[unrecognized voice ignored]")
+                except Exception:
+                    pass
                 await set_state("idle")
                 return
 
@@ -317,6 +328,15 @@ async def websocket_endpoint(ws: WebSocket):
     await ws.send_text(json.dumps({"type": "state", "value": current_state}))
     await ws.send_text(json.dumps({"type": "wake", "enabled": mic.wake_enabled}))
     await ws.send_text(json.dumps({"type": "voice_status", "enrolled": voiceid.enrolled}))
+    try:
+        from core import memory
+        for item in memory.recent_conversations(50):
+            await ws.send_text(json.dumps({
+                "type": "user_said" if item["role"] == "user" else "reply",
+                "text": item["text"],
+            }))
+    except Exception as e:
+        print(f"history send failed: {e}")
     try:
         while True:
             raw = await ws.receive_text()
@@ -377,6 +397,15 @@ async def websocket_endpoint(ws: WebSocket):
             elif cmd == "voice_reset":
                 voiceid.reset()
                 await send_event({"type": "voice_status", "enrolled": False})
+            elif cmd == "wipe_memory":
+                try:
+                    from core import memory
+                    memory.wipe_memory()
+                    brain.reset_history()
+                    await send_event({"type": "cleared"})
+                    await send_event({"type": "memory_wiped"})
+                except Exception as e:
+                    await send_event({"type": "error", "message": f"Wipe failed: {e}"})
     except WebSocketDisconnect:
         pass
     finally:

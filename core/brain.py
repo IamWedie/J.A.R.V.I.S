@@ -5,6 +5,7 @@ from datetime import datetime
 from openai import AsyncOpenAI
 
 import core.config as config
+from core import memory
 from core.tools import pc_tools, web_tools
 
 SYSTEM_PROMPT = (
@@ -17,6 +18,8 @@ SYSTEM_PROMPT = (
     "- Use tools when the request needs a PC action or live data.\n"
     "- After a tool result arrives, answer briefly using it; never invent values that were not returned.\n"
     "- NEVER close an app unless explicitly asked. NEVER repeat a tool call with identical arguments.\n"
+    "- You have PERMANENT local memory. When the user asks you to remember something, call remember_fact. "
+    "To look up past conversations or personal details, call recall_memories. Never claim you cannot remember.\n"
     "- Never mention tools, JSON, or result mechanics; speak naturally."
 )
 
@@ -132,8 +135,29 @@ TOOLS = [
         }, "required": ["query"]},
     }},
     {"type": "function", "function": {
+        "name": "remember_fact",
+        "description": "Store a permanent fact in local memory (e.g. 'My sister's name is Lina').",
+        "parameters": {"type": "object", "properties": {
+            "fact": {"type": "string"},
+        }, "required": ["fact"]},
+    }},
+    {"type": "function", "function": {
+        "name": "forget_fact",
+        "description": "Delete facts matching the given text from memory.",
+        "parameters": {"type": "object", "properties": {
+            "substring": {"type": "string"},
+        }, "required": ["substring"]},
+    }},
+    {"type": "function", "function": {
+        "name": "recall_memories",
+        "description": "Search all past conversations and stored facts for the given text.",
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string"},
+        }, "required": ["query"]},
+    }},
+    {"type": "function", "function": {
         "name": "lock_screen",
-        "description": "Lock the screen. Requires user approval in the UI.",
+        "description": "Lock the PC screen. Requires user approval.",
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
@@ -161,9 +185,47 @@ TOOL_FUNCTIONS = {
     "type_text": pc_tools.type_text,
     "open_url": pc_tools.open_url,
     "web_search": web_tools.web_search,
+    "remember_fact": memory.add_fact,
+    "forget_fact": memory.remove_fact,
+    "recall_memories": lambda query: _recall_memories(query),
     "lock_screen": pc_tools.lock_screen,
     "sleep_pc": pc_tools.sleep_pc,
 }
+
+
+def _recall_memories(query):
+    convs = memory.search_conversations(query, limit=5)
+    ql = str(query).lower()
+    facts = [f for f in memory.list_facts() if ql in f.lower()]
+    parts = []
+    if facts:
+        parts.append("Facts:\n" + "\n".join(f"- {f}" for f in facts))
+    if convs:
+        parts.append("Past conversation:\n" + "\n".join(
+            f"[{c['ts']}] {c['role']}: {c['text'][:200]}" for c in convs
+        ))
+    if not parts:
+        return "Nothing found in memory about that."
+    return "\n".join(parts)
+
+
+def _memory_context(user_text):
+    try:
+        facts = memory.relevant_facts(user_text)
+        recent = memory.recent_conversations(14)
+        parts = []
+        if facts:
+            parts.append("Known facts:\n" + "\n".join(f"- {f}" for f in facts))
+        if recent:
+            parts.append("Recent conversation:\n" + "\n".join(
+                f"{r['role']}: {r['text'][:160]}" for r in recent
+            ))
+        if not parts:
+            return ""
+        return "\n\nLOCAL MEMORY (stored on the user's PC):\n" + "\n\n".join(parts)
+    except Exception as e:
+        print(f"memory context failed: {e}")
+        return ""
 
 APPROVAL_REQUIRED = {"type_text", "lock_screen", "sleep_pc"}
 
@@ -297,7 +359,7 @@ class Brain:
         client = self._ensure_client()
         system_message = {
             "role": "system",
-            "content": SYSTEM_PROMPT + f"\nCurrent date and time: {datetime.now():%A %d %B %Y, %H:%M}.",
+            "content": SYSTEM_PROMPT + f"\nCurrent date and time: {datetime.now():%A %d %B %Y, %H:%M}." + _memory_context(user_text),
         }
         messages = [system_message] + self.history + [
             {"role": "user", "content": user_text}
@@ -312,6 +374,11 @@ class Brain:
                 reply = msg.content or ""
                 self.history.append({"role": "user", "content": user_text})
                 self.history.append({"role": "assistant", "content": reply})
+                try:
+                    memory.log("user", user_text)
+                    memory.log("assistant", reply)
+                except Exception as e:
+                    print(f"memory log failed: {e}")
                 if len(self.history) > 40:
                     self.history = self.history[-40:]
                 return reply

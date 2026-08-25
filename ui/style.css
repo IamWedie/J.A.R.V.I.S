@@ -156,7 +156,8 @@ body {
     display: flex;
     flex-direction: column;
     height: 100vh;
-    max-width: 420px;
+    width: 100%;
+    max-width: 560px;
     margin: 0 auto;
     padding: 10px 14px;
 }
@@ -276,6 +277,10 @@ body {
 #face {
     align-self: center;
     margin-top: 4px;
+    width: 100%;
+    max-width: 440px;
+    height: 42vh;
+    min-height: 200px;
 }
 
 #status {
