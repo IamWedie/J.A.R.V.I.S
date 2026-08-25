@@ -7,6 +7,7 @@ from openai import AsyncOpenAI
 
 import core.config as config
 from core import memory
+from core import netdiscovery
 from core.tools import pc_tools, web_tools
 
 SYSTEM_PROMPT = (
@@ -21,6 +22,8 @@ SYSTEM_PROMPT = (
     "- NEVER close an app unless explicitly asked. NEVER repeat a tool call with identical arguments.\n"
     "- You have PERMANENT local memory. When the user asks you to remember something, call remember_fact. "
     "To look up past conversations or personal details, call recall_memories. Never claim you cannot remember.\n"
+    "- You can see the user's WiFi network: use list_network_devices when they ask what devices are connected, "
+    "and where_is_device to check if a specific device (TV, phone, laptop) is home.\n"
     "- Never mention tools, JSON, or result mechanics; speak naturally."
 )
 
@@ -143,6 +146,20 @@ TOOLS = [
         }, "required": ["fact"]},
     }},
     {"type": "function", "function": {
+        "name": "list_network_devices",
+        "description": "Scan the WiFi network and list every device found (TVs, phones, laptops) with type, name and IP.",
+        "parameters": {"type": "object", "properties": {
+            "refresh": {"type": "boolean", "description": "true = force a fresh scan (takes ~10s); false = use recent scan"},
+        }},
+    }},
+    {"type": "function", "function": {
+        "name": "where_is_device",
+        "description": "Check whether a specific device (by name, brand or type like 'tv' or 'samsung') is present on the network.",
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string"},
+        }, "required": ["name"]},
+    }},
+    {"type": "function", "function": {
         "name": "forget_fact",
         "description": "Delete facts matching the given text from memory.",
         "parameters": {"type": "object", "properties": {
@@ -189,6 +206,10 @@ TOOL_FUNCTIONS = {
     "remember_fact": memory.add_fact,
     "forget_fact": memory.remove_fact,
     "recall_memories": lambda query: _recall_memories(query),
+    "list_network_devices": lambda refresh=False: netdiscovery.format_devices(
+        netdiscovery.get_devices(force=bool(refresh))
+    ),
+    "where_is_device": lambda name: netdiscovery.format_devices(netdiscovery.find_device(name)),
     "lock_screen": pc_tools.lock_screen,
     "sleep_pc": pc_tools.sleep_pc,
 }

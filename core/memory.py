@@ -31,6 +31,11 @@ def _init():
             ts TEXT NOT NULL,
             fact TEXT NOT NULL UNIQUE
         );
+        CREATE TABLE IF NOT EXISTS devices (
+            ip TEXT PRIMARY KEY,
+            data TEXT NOT NULL,
+            last_seen TEXT NOT NULL
+        );
         CREATE INDEX IF NOT EXISTS idx_conv_ts ON conversations(ts);
         """
     )
@@ -39,6 +44,36 @@ def _init():
 
 
 _init()
+
+
+def save_devices(devices):
+    now = _now()
+    with _lock:
+        conn = _connect()
+        for d in devices:
+            conn.execute(
+                "INSERT INTO devices (ip, data, last_seen) VALUES (?, ?, ?) "
+                "ON CONFLICT(ip) DO UPDATE SET data=excluded.data, last_seen=excluded.last_seen",
+                (d["ip"], json.dumps(d), now),
+            )
+        conn.commit()
+        conn.close()
+
+
+def known_devices():
+    with _lock:
+        conn = _connect()
+        rows = conn.execute("SELECT data, last_seen FROM devices ORDER BY ip").fetchall()
+        conn.close()
+    out = []
+    for r in rows:
+        try:
+            d = json.loads(r["data"])
+            d["last_seen"] = r["last_seen"]
+            out.append(d)
+        except Exception:
+            continue
+    return out
 
 
 def _now():
