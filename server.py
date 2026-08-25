@@ -15,6 +15,7 @@ from core.mic import mic, SAMPLE_RATE
 from core.stt import transcriber
 from core.tts import speaker
 from core.voiceid import voiceid
+from core.net import netmsg
 
 from datetime import datetime
 
@@ -537,6 +538,7 @@ async def startup():
     asyncio.create_task(level_broadcaster())
     asyncio.create_task(startup_greeting())
     asyncio.create_task(away_watcher())
+    netmsg.start_receiver()
 
 
 _startup_audio = None

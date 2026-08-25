@@ -11,6 +11,7 @@ from core import netdiscovery
 from core.net import cast_controller
 from core.net import adb_controller
 from core.net import agent as phone_agent
+from core.net import netmsg
 from core.tools import pc_tools, web_tools
 
 SYSTEM_PROMPT = (
@@ -36,7 +37,9 @@ SYSTEM_PROMPT = (
     "- For complex multi-step phone tasks (e.g. 'take a selfie and send it', 'open YouTube and play a video', "
     "'set an alarm'), use phone_agent — it autonomously takes screenshots, reads the screen, and executes "
     "the needed taps/swipes/types to accomplish the goal.\n"
-    "- Never mention tools, JSON, or result mechanics; speak naturally."
+    "- Never mention tools, JSON, or result mechanics; speak naturally.\n"
+    "- You can send messages to other devices on the network: use net_send_message for a specific device IP, "
+    "or net_broadcast to message all devices. Use net_read_messages to check incoming messages."
 )
 
 TOOLS = [
@@ -496,6 +499,26 @@ TOOLS = [
         }, "required": ["query"]},
     }},
     {"type": "function", "function": {
+        "name": "net_send_message",
+        "description": "Send a message to a specific device on the network by IP address.",
+        "parameters": {"type": "object", "properties": {
+            "ip": {"type": "string"},
+            "message": {"type": "string"},
+        }, "required": ["ip", "message"]},
+    }},
+    {"type": "function", "function": {
+        "name": "net_broadcast",
+        "description": "Broadcast a message to all devices on the local network.",
+        "parameters": {"type": "object", "properties": {
+            "message": {"type": "string"},
+        }, "required": ["message"]},
+    }},
+    {"type": "function", "function": {
+        "name": "net_read_messages",
+        "description": "Read recent messages received from other devices on the network.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
         "name": "lock_screen",
         "description": "Lock the PC screen. Requires user approval.",
         "parameters": {"type": "object", "properties": {}},
@@ -585,6 +608,9 @@ TOOL_FUNCTIONS = {
     "phone_shutdown": adb_controller.shutdown,
     "phone_contacts": adb_controller.list_contacts,
     "phone_agent": lambda goal: _run_agent(goal),
+    "net_send_message": netmsg.send_message,
+    "net_broadcast": netmsg.send_broadcast,
+    "net_read_messages": lambda: netmsg.get_messages(),
     "lock_screen": pc_tools.lock_screen,
     "sleep_pc": pc_tools.sleep_pc,
 }
@@ -609,13 +635,15 @@ def _recall_memories(query):
 async def _run_agent_async(goal):
     steps = await phone_agent.agent_task(goal, max_steps=12)
     actions = [s for s in steps if s["status"] == "action"]
+    waited = any(s["status"] == "waiting" for s in steps)
     done = next((s for s in steps if s["status"] == "done"), None)
     fail = next((s for s in steps if s["status"] in ("fail", "error")), None)
+    prefix = "Waited for phone to be free, then " if waited else ""
     if done:
-        return f"Agent completed the task in {len(actions)} steps: {done['message']}"
+        return f"{prefix}Agent completed the task in {len(actions)} steps: {done['message']}"
     if fail:
-        return f"Agent failed after {len(actions)} steps: {fail['message']}"
-    return f"Agent performed {len(actions)} steps but did not complete the task."
+        return f"{prefix}Agent failed after {len(actions)} steps: {fail['message']}"
+    return f"{prefix}Agent performed {len(actions)} steps but did not complete the task."
 
 
 def _run_agent(goal):

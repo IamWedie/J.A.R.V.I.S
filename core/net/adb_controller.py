@@ -429,6 +429,39 @@ def get_camera_facing():
     return "unknown"
 
 
+def is_locked():
+    out = _shell_raw("dumpsys window | grep -E 'mDreamingLockscreen|mShowingLockscreen|isStatusBarKeyguard'")
+    if "mDreamingLockscreen=true" in out or "mShowingLockscreen=true" in out:
+        return True
+    keyguard = _shell_raw("dumpsys window | grep 'isStatusBarKeyguard'")
+    if "true" in keyguard.lower():
+        return True
+    return False
+
+
+def is_screen_on():
+    out = _shell_raw("dumpsys power | grep mWakefulness")
+    return "Awake" in out
+
+
+def is_in_use():
+    if not is_screen_on():
+        return False
+    activity = _shell_raw("dumpsys activity activities | grep -E 'ResumedActivity:'")
+    pkg = ""
+    m = re.search(r"u0 (\S+?)/", activity)
+    if m:
+        pkg = m.group(1)
+    if not pkg or "launcher" in pkg.lower():
+        return False
+    ime = _shell_raw("dumpsys input_method | grep mInputShown")
+    if "true" in ime.lower():
+        return True
+    if pkg and "launcher" not in pkg.lower():
+        return True
+    return False
+
+
 def record_video(seconds=10):
     time.sleep(0.5)
     _shell("input tap 540 2200")

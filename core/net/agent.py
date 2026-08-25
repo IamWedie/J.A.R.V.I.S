@@ -10,6 +10,7 @@ from core.net.adb_controller import (
     type_text, open_app, current_activity,
     open_camera, take_photo, take_selfie, switch_camera, toggle_flash,
     notify, vibrate, play_completion_sound, get_camera_facing,
+    is_locked, is_in_use, is_screen_on,
 )
 
 
@@ -133,6 +134,12 @@ def _smart_action(goal, pkg):
         return "done", "Camera opened"
 
     if "unlock" in goal_lower:
+        if not is_screen_on():
+            from core.net.adb_controller import screen_on
+            screen_on()
+            time.sleep(0.5)
+        if not is_locked():
+            return "done", "Phone is already unlocked."
         pin = re.search(r"\d{4,6}", goal)
         if pin:
             from core.net.adb_controller import unlock_with_pin
@@ -175,6 +182,12 @@ async def run_agent(goal, max_steps=8):
     if not _is_connected():
         yield {"step": 0, "status": "error", "message": "Phone not connected."}
         return
+
+    if is_in_use() and "unlock" not in goal.lower():
+        yield {"step": 0, "status": "waiting", "message": "Phone is in use — waiting for you to finish..."}
+        while is_in_use():
+            await asyncio.sleep(3)
+        yield {"step": 0, "status": "resumed", "message": "Phone is free. Proceeding."}
 
     yield {"step": 0, "status": "started", "message": f"Starting: {goal}"}
 
