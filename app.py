@@ -110,6 +110,7 @@ if __name__ == "__main__":
         sys.exit(0)
 
     set_app_user_model_id()
+    start_hidden = "--hidden" in sys.argv
     check_ok = bool(config.ZEN_API_KEY)
 
     if check_ok:
@@ -122,12 +123,21 @@ if __name__ == "__main__":
         f"http://{config.HOST}:{config.PORT}",
         width=420,
         height=760,
-        resizable=False,
+        resizable=True,
         background_color="#070b14",
     )
 
     from tray import start_tray, on_window_close_request, set_pause_callback
     window.events.closing += on_window_close_request
+
+    if start_hidden:
+        def hide_when_ready():
+            try:
+                window.hide()
+                print("boot: started hidden in tray")
+            except Exception as e:
+                print(f"hide failed: {e}")
+        window.events.loaded += hide_when_ready
 
     def on_pause(paused):
         import server
