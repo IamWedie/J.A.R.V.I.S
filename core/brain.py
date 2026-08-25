@@ -28,8 +28,10 @@ SYSTEM_PROMPT = (
     "and where_is_device to check if a specific device (TV, phone, laptop) is home.\n"
     "- You can cast YouTube videos and web content to Chromecast/Google TV devices: use cast_youtube for YouTube, "
     "cast_url for any web video. Use list_cast_devices to discover available targets.\n"
-    "- The user's phone (Huawei, Android 14) is connected via wireless ADB. You can take screenshots, open/close apps, "
-    "tap/swipe the screen, type text, open URLs, check battery, control volume. Use phone_info to confirm connection.\n"
+    "- The user's phone (Honor, Android 14) is connected via wireless ADB. You have FULL control: "
+    "unlock with PIN, take photos/selfies with flash, open/close any app, read/send SMS, make calls, "
+    "browse files, toggle WiFi/Bluetooth/airplane, control volume/brightness, reboot, read notifications, "
+    "share clipboard, and tap/swipe/type anything. Always use phone_unlock_with_pin when user asks to unlock.\n"
     "- Never mention tools, JSON, or result mechanics; speak naturally."
 )
 
@@ -211,106 +213,254 @@ TOOLS = [
     }},
     {"type": "function", "function": {
         "name": "phone_info",
-        "description": "Get the connected phone's model, Android version, battery level and screen resolution.",
+        "description": "Get phone model, Android version, battery, resolution.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_battery",
+        "description": "Detailed battery info: level, temp, voltage, charging.",
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
         "name": "phone_screenshot",
-        "description": "Take a screenshot of the connected phone's screen.",
-        "parameters": {"type": "object", "properties": {}},
-    }},
-    {"type": "function", "function": {
-        "name": "phone_home",
-        "description": "Press the home button on the connected phone.",
+        "description": "Screenshot the phone screen.",
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
         "name": "phone_unlock",
-        "description": "Wake and swipe to unlock the phone. Note: cannot bypass PIN/pattern locks.",
+        "description": "Wake and swipe to unlock (no PIN).",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_unlock_with_pin",
+        "description": "Wake, swipe, enter PIN to unlock.",
+        "parameters": {"type": "object", "properties": {
+            "pin": {"type": "string"},
+        }, "required": ["pin"]},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_brightness",
+        "description": "Set screen brightness 0-255.",
+        "parameters": {"type": "object", "properties": {
+            "level": {"type": "integer"},
+        }, "required": ["level"]},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_home",
+        "description": "Press home button.",
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
         "name": "phone_back",
-        "description": "Press the back button on the connected phone.",
+        "description": "Press back button.",
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
         "name": "phone_tap",
-        "description": "Tap a specific point on the phone screen by x,y coordinates (1080x2412 resolution).",
+        "description": "Tap x,y on phone screen (1080x2412).",
         "parameters": {"type": "object", "properties": {
-            "x": {"type": "integer"},
-            "y": {"type": "integer"},
+            "x": {"type": "integer"}, "y": {"type": "integer"},
         }, "required": ["x", "y"]},
     }},
     {"type": "function", "function": {
         "name": "phone_swipe",
-        "description": "Swipe on the phone screen from (x1,y1) to (x2,y2).",
+        "description": "Swipe from (x1,y1) to (x2,y2).",
         "parameters": {"type": "object", "properties": {
             "x1": {"type": "integer"}, "y1": {"type": "integer"},
             "x2": {"type": "integer"}, "y2": {"type": "integer"},
         }, "required": ["x1", "y1", "x2", "y2"]},
     }},
     {"type": "function", "function": {
+        "name": "phone_swipe_up",
+        "description": "Swipe up (scroll down).",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_swipe_down",
+        "description": "Swipe down (notification shade / scroll up).",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
         "name": "phone_type",
-        "description": "Type text on the connected phone (the active text field must be focused).",
+        "description": "Type text into focused field.",
         "parameters": {"type": "object", "properties": {
             "text": {"type": "string"},
         }, "required": ["text"]},
     }},
     {"type": "function", "function": {
         "name": "phone_open_app",
-        "description": "Open an app on the phone by package name. Use 'camera' to open the camera.",
+        "description": "Open app by package or shortcut: camera, settings, chrome, phone, contacts, messages, gallery, youtube.",
         "parameters": {"type": "object", "properties": {
-            "package": {"type": "string", "description": "e.g. 'com.whatsapp', 'com.instagram.android', 'camera'"},
+            "package": {"type": "string"},
         }, "required": ["package"]},
     }},
     {"type": "function", "function": {
-        "name": "phone_open_camera",
-        "description": "Open the phone's camera app directly.",
-        "parameters": {"type": "object", "properties": {}},
-    }},
-    {"type": "function", "function": {
         "name": "phone_close_app",
-        "description": "Force-stop an app on the phone.",
+        "description": "Force-stop an app.",
         "parameters": {"type": "object", "properties": {
             "package": {"type": "string"},
         }, "required": ["package"]},
     }},
     {"type": "function", "function": {
         "name": "phone_list_apps",
-        "description": "List all third-party apps installed on the connected phone.",
+        "description": "List installed third-party apps.",
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
-        "name": "phone_open_url",
-        "description": "Open a URL on the connected phone's browser.",
+        "name": "phone_current_app",
+        "description": "Show currently active app.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_take_photo",
+        "description": "Take a photo with rear camera.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_take_selfie",
+        "description": "Switch to front camera and take a selfie.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_flash_on",
+        "description": "Toggle camera flash.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_switch_camera",
+        "description": "Switch front/rear camera.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_get_clipboard",
+        "description": "Get phone clipboard text.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_share_text",
+        "description": "Open share dialog with text.",
         "parameters": {"type": "object", "properties": {
-            "url": {"type": "string"},
-        }, "required": ["url"]},
+            "text": {"type": "string"},
+        }, "required": ["text"]},
     }},
     {"type": "function", "function": {
-        "name": "phone_screen_on",
-        "description": "Wake up the phone screen.",
+        "name": "phone_list_files",
+        "description": "List files on phone. Default /sdcard/. Use /sdcard/Download/, /sdcard/DCIM/Camera/, etc.",
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string"},
+        }},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_find_files",
+        "description": "Search phone files by name.",
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string"},
+        }, "required": ["name"]},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_delete_file",
+        "description": "Delete a file on phone.",
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string"},
+        }, "required": ["path"]},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_storage",
+        "description": "Show phone storage usage.",
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
-        "name": "phone_screen_off",
-        "description": "Turn off the phone screen.",
+        "name": "phone_wifi_on",
+        "description": "Turn on WiFi.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_wifi_off",
+        "description": "Turn off WiFi.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_bluetooth_on",
+        "description": "Turn on Bluetooth.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_bluetooth_off",
+        "description": "Turn off Bluetooth.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_airplane_on",
+        "description": "Turn on airplane mode.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_airplane_off",
+        "description": "Turn off airplane mode.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_make_call",
+        "description": "Call a phone number.",
+        "parameters": {"type": "object", "properties": {
+            "number": {"type": "string"},
+        }, "required": ["number"]},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_end_call",
+        "description": "End current call.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_send_sms",
+        "description": "Send SMS to a number.",
+        "parameters": {"type": "object", "properties": {
+            "number": {"type": "string"}, "message": {"type": "string"},
+        }, "required": ["number", "message"]},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_read_notifications",
+        "description": "Read current phone notifications.",
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
         "name": "phone_volume_up",
-        "description": "Increase phone volume.",
+        "description": "Volume up.",
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
         "name": "phone_volume_down",
-        "description": "Decrease phone volume.",
+        "description": "Volume down.",
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
-        "name": "phone_battery",
-        "description": "Check phone battery level and charging status.",
+        "name": "phone_media_play",
+        "description": "Resume media playback.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_media_pause",
+        "description": "Pause media playback.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_media_next",
+        "description": "Next media track.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_reboot",
+        "description": "Reboot the phone.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_shutdown",
+        "description": "Shut down the phone.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "phone_contacts",
+        "description": "List contacts on the phone.",
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
@@ -379,23 +529,50 @@ TOOL_FUNCTIONS = {
     "cast_status": cast_controller.cast_status,
     "list_cast_devices": lambda refresh=False: cast_controller.list_devices(refresh=bool(refresh)),
     "phone_info": adb_controller.device_info,
+    "phone_battery": adb_controller.battery,
     "phone_screenshot": adb_controller.screenshot,
+    "phone_unlock": adb_controller.unlock,
+    "phone_unlock_with_pin": adb_controller.unlock_with_pin,
+    "phone_brightness": adb_controller.screen_brightness,
     "phone_home": adb_controller.home,
     "phone_back": adb_controller.back,
-    "phone_unlock": adb_controller.unlock,
     "phone_tap": adb_controller.tap,
     "phone_swipe": adb_controller.swipe,
+    "phone_swipe_up": adb_controller.swipe_up,
+    "phone_swipe_down": adb_controller.swipe_down,
     "phone_type": adb_controller.type_text,
     "phone_open_app": adb_controller.open_app,
-    "phone_open_camera": adb_controller.open_camera,
     "phone_close_app": adb_controller.close_app,
     "phone_list_apps": adb_controller.list_apps,
-    "phone_open_url": adb_controller.open_url,
-    "phone_screen_on": adb_controller.screen_on,
-    "phone_screen_off": adb_controller.screen_off,
+    "phone_current_app": adb_controller.current_activity,
+    "phone_take_photo": adb_controller.take_photo,
+    "phone_take_selfie": adb_controller.take_selfie,
+    "phone_flash_on": adb_controller.flash_on,
+    "phone_switch_camera": adb_controller.switch_camera,
+    "phone_get_clipboard": adb_controller.get_clipboard,
+    "phone_share_text": adb_controller.share_text,
+    "phone_list_files": adb_controller.list_files,
+    "phone_find_files": adb_controller.find_files,
+    "phone_delete_file": adb_controller.delete_file,
+    "phone_storage": adb_controller.storage_info,
+    "phone_wifi_on": adb_controller.wifi_on,
+    "phone_wifi_off": adb_controller.wifi_off,
+    "phone_bluetooth_on": adb_controller.bluetooth_on,
+    "phone_bluetooth_off": adb_controller.bluetooth_off,
+    "phone_airplane_on": adb_controller.airplane_on,
+    "phone_airplane_off": adb_controller.airplane_off,
+    "phone_make_call": adb_controller.make_call,
+    "phone_end_call": adb_controller.end_call,
+    "phone_send_sms": adb_controller.send_sms,
+    "phone_read_notifications": adb_controller.read_notifications,
     "phone_volume_up": adb_controller.volume_up,
     "phone_volume_down": adb_controller.volume_down,
-    "phone_battery": adb_controller.battery,
+    "phone_media_play": adb_controller.media_play,
+    "phone_media_pause": adb_controller.media_pause,
+    "phone_media_next": adb_controller.media_next,
+    "phone_reboot": adb_controller.reboot,
+    "phone_shutdown": adb_controller.shutdown,
+    "phone_contacts": adb_controller.list_contacts,
     "lock_screen": pc_tools.lock_screen,
     "sleep_pc": pc_tools.sleep_pc,
 }
