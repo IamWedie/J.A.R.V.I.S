@@ -1,5 +1,5 @@
 #define MyAppName "JARVIS"
-#define MyAppVersion "1.0"
+#define MyAppVersion "2.0"
 #define MyAppPublisher "Wadia"
 #define MyAppExeName "JARVIS.exe"
 
@@ -22,7 +22,6 @@ WizardStyle=modern
 UninstallDisplayIcon={app}\JARVIS.exe
 
 [Tasks]
-Name: "autostart"; Description: "Start JARVIS automatically when I log in"
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: checkedonce
 
 [Files]
@@ -30,8 +29,10 @@ Source: "dist\JARVIS\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs c
 
 [Icons]
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\jarvis.ico"; Tasks: desktopicon
-Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\jarvis.ico"; Tasks: autostart
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "JARVIS"; ValueData: """{app}\JARVIS.exe"" --hidden"; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
@@ -53,11 +54,6 @@ begin
   KeyPage.Add('Zen API key (sk-...)', True);
 end;
 
-function ShouldSkipPage(PageID: Integer): Boolean;
-begin
-  Result := False;
-end;
-
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   DataDir, Key: String;
@@ -71,7 +67,8 @@ begin
       ForceDirectories(DataDir);
       SaveStringToFile(DataDir + '\config.env',
         'ZEN_API_KEY=' + Key + #13#10 +
-        'ZEN_MODEL=mimo-v2.5-free' + #13#10,
+        'ZEN_MODEL=mimo-v2.5-free' + #13#10 +
+        'WAKE_ENABLED=1' + #13#10,
         False);
     end;
   end;

@@ -1,3 +1,4 @@
+import os
 import time
 
 import numpy as np
@@ -18,7 +19,14 @@ class Transcriber:
     def _load(self):
         if self._model is None:
             from faster_whisper import WhisperModel
-            self._model = WhisperModel(config.STT_MODEL, device="cpu", compute_type="int8")
+            models_dir = config.models_dir()
+            local = os.path.join(models_dir, "tiny.en") if models_dir else ""
+            if local and os.path.isfile(os.path.join(local, "model.bin")):
+                print(f"[stt] using bundled model: {local}")
+                self._model = WhisperModel(local, device="cpu", compute_type="int8")
+            else:
+                print(f"[stt] using downloaded model: {config.STT_MODEL}")
+                self._model = WhisperModel(config.STT_MODEL, device="cpu", compute_type="int8")
         return self._model
 
     def transcribe_array(self, audio_float32):

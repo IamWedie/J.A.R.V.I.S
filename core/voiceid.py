@@ -87,7 +87,16 @@ class VoiceID:
     def _load_embedder(self):
         if self.embedder is None:
             from speakeronnx import SpeakerEmbedder
-            self.embedder = SpeakerEmbedder(model=MODEL_NAME)
+
+            import core.config as config
+            models_dir = config.models_dir()
+            local = os.path.join(models_dir, "redimnet_b2_vox2.onnx") if models_dir else ""
+            if local and os.path.isfile(local):
+                print(f"[voiceid] using bundled model: {local}")
+                self.embedder = SpeakerEmbedder(model=local)
+            else:
+                print(f"[voiceid] using downloaded model: {MODEL_NAME}")
+                self.embedder = SpeakerEmbedder(model=MODEL_NAME)
         return self.embedder
 
     def _embed(self, wav):

@@ -42,6 +42,11 @@ def resolve_path(p):
         return p
     return os.path.join(PROJECT_DIR, p)
 
+
+def models_dir():
+    cand = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models")
+    return cand if os.path.isdir(cand) else ""
+
 HOST = "127.0.0.1"
 PORT = 8741
 

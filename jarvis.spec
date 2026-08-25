@@ -17,13 +17,13 @@ hiddenimports = [
     "websockets",
     "pystray._win32",
     "comtypes.stream",
-    "sqlalchemy.dialects.sqlite",
 ]
 
 datas = [
     ("ui", "ui"),
     ("jarvis.ico", "."),
     ("TERMS.md", "."),
+    ("models", "models"),
 ]
 datas += collect_data_files("openwakeword")
 datas += collect_data_files("faster_whisper")
