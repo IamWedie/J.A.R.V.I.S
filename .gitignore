@@ -1,0 +1,28 @@
+# Secrets - NEVER commit
+.env
+config.env
+*.env.backup
+
+# Python
+__pycache__/
+*.pyc
+venv/
+
+# Build artifacts
+build/
+dist/
+installer_output/
+
+# Runtime data & logs
+logs/
+screenshots/
+models/
+*.db
+owner_voice.npy
+
+# Copyrighted personal assets
+assets/
+
+# OS junk
+Thumbs.db
+.DS_Store

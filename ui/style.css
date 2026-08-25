@@ -1,0 +1,406 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+#enrollBanner {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 74px;
+    background: linear-gradient(135deg, rgba(16,42,66,.96), rgba(10,28,46,.96));
+    border: 1px solid rgba(90,190,255,.5);
+    border-radius: 12px;
+    padding: 14px;
+    z-index: 90;
+    text-align: center;
+    box-shadow: 0 0 24px rgba(50,170,255,.25);
+}
+
+#enrollBanner.hidden { display: none !important; }
+
+#enrollStep {
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: #6fb8e0;
+    margin-bottom: 8px;
+}
+
+#enrollPhrase {
+    font-size: 17px;
+    line-height: 1.4;
+    color: #eaf8ff;
+    font-weight: 600;
+}
+
+#enrollHint {
+    font-size: 10.5px;
+    color: #7fa8c4;
+    margin-top: 8px;
+}
+
+
+#setupWizard {
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 30%, #0d1526 0%, #070b14 70%);
+    z-index: 100;
+    padding: 26px 22px;
+    overflow-y: auto;
+}
+
+.wizTitle {
+    font-size: 17px;
+    letter-spacing: 7px;
+    color: #6fd3ff;
+    text-shadow: 0 0 12px rgba(60,180,255,.55);
+    text-align: center;
+    margin-bottom: 18px;
+}
+
+.wizHeading {
+    font-size: 14.5px;
+    letter-spacing: 2px;
+    color: #9fdcff;
+    margin-bottom: 10px;
+}
+
+.wizStep { margin-bottom: 16px; }
+.wizStep.hidden, #wizDone.hidden { display: none !important; }
+
+#termsBox {
+    height: 200px;
+    overflow-y: auto;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: #a8cde6;
+    background: rgba(8,16,28,.6);
+    border: 1px solid rgba(40,90,130,.3);
+    border-radius: 8px;
+    padding: 10px;
+    white-space: pre-wrap;
+    margin-bottom: 10px;
+}
+
+.agreeRow {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 12.5px;
+    color: #cfe9ff;
+    margin-bottom: 12px;
+}
+
+#keyInput {
+    width: 100%;
+    height: 42px;
+    border-radius: 8px;
+    border: 1px solid rgba(50,110,160,.5);
+    background: rgba(10,22,36,.85);
+    color: #d8efff;
+    padding: 0 12px;
+    font-size: 13px;
+    outline: none;
+    margin-bottom: 10px;
+}
+
+#wizardModelSelect {
+    width: 100%;
+    height: 170px;
+    border-radius: 8px;
+    border: 1px solid #1e4a6e;
+    background: rgba(20,40,65,.8);
+    color: #bfe4ff;
+    font-size: 12px;
+    padding: 6px;
+    margin-bottom: 10px;
+}
+
+#wizStep2 .hint, #wizStep3 .hint, #wizStep4 .hint {
+    font-size: 11.5px;
+    color: #7fa8c4;
+    margin-bottom: 10px;
+    line-height: 1.45;
+}
+
+.wizBtn {
+    width: 100%;
+    padding: 11px;
+    font-size: 12.5px;
+    letter-spacing: 2.5px;
+    border-radius: 8px;
+    cursor: pointer;
+    background: linear-gradient(135deg, rgba(35,110,165,.75), rgba(25,80,125,.65));
+    border: 1px solid rgba(90,190,255,.45);
+    color: #eaf8ff;
+}
+
+.wizBtn:disabled { opacity: .35; cursor: default; }
+.wizBtn.skip { background: rgba(60,60,60,.35); border-color: rgba(150,150,150,.35); }
+
+#keyStatus, #enrollStatus2 {
+    font-size: 12px;
+    min-height: 18px;
+    margin-top: 8px;
+    color: #ffd9a0;
+}
+#keyStatus.ok { color: #7dffc8; }
+
+
+body {
+    background: radial-gradient(ellipse at 50% 30%, #0d1526 0%, #070b14 70%);
+    color: #cfe9ff;
+    font-family: "Segoe UI", "Rajdhani", sans-serif;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 10px 14px;
+}
+
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.controls {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+#wakeBtn {
+    background: rgba(20, 40, 65, .8);
+    color: #7fb8d8;
+    border: 1px solid #1e4a6e;
+    border-radius: 6px;
+    font-size: 10px;
+    padding: 5px 8px;
+    cursor: pointer;
+    letter-spacing: 1px;
+}
+
+#wakeBtn.on {
+    color: #7dffc8;
+    border-color: rgba(80, 230, 170, .55);
+    box-shadow: 0 0 8px rgba(60, 220, 160, .35);
+}
+
+#settingsBtn {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    border: 1px solid #1e4a6e;
+    background: rgba(20, 40, 65, .8);
+    color: #7fb8d8;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+#settingsPanel {
+    margin-top: 8px;
+    padding: 10px;
+    border: 1px solid rgba(50, 110, 160, .4);
+    background: rgba(10, 22, 36, .85);
+    border-radius: 10px;
+}
+
+.settingsRow {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12.5px;
+    color: #9fd2ef;
+    margin-bottom: 8px;
+}
+
+#voiceStatus.active { color: #7dffc8; }
+
+#settingsPanel button {
+    width: 100%;
+    padding: 7px;
+    margin-bottom: 6px;
+    font-size: 11.5px;
+    letter-spacing: 1.5px;
+    border-radius: 7px;
+    cursor: pointer;
+    background: rgba(20, 55, 85, .55);
+    border: 1px solid #2a6f9e;
+    color: #9fdcff;
+}
+
+#voiceSelect, #rateSelect {
+    width: 100%;
+    padding: 6px;
+    margin-bottom: 6px;
+    font-size: 11.5px;
+    border-radius: 7px;
+    border: 1px solid #1e4a6e;
+    background: rgba(20, 40, 65, .8);
+    color: #8fd8ff;
+}
+
+#settingsPanel button.danger {
+    border-color: rgba(255, 100, 100, .45);
+    color: #ffb3b3;
+    background: rgba(130, 30, 30, .25);
+}
+
+#settingsPanel .hint {
+    font-size: 10.5px;
+    color: #5f8aa8;
+    line-height: 1.4;
+}
+
+.title {
+    font-size: 13px;
+    letter-spacing: 3px;
+    color: #6fd3ff;
+    text-shadow: 0 0 12px rgba(60, 180, 255, .55);
+    white-space: nowrap;
+}
+
+#modelSelect {
+    background: rgba(20, 40, 65, .8);
+    color: #8fd8ff;
+    border: 1px solid #1e4a6e;
+    border-radius: 6px;
+    font-size: 10.5px;
+    padding: 4px 4px;
+    max-width: 118px;
+}
+
+#face {
+    align-self: center;
+    margin-top: 4px;
+}
+
+#status {
+    text-align: center;
+    font-size: 13px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: #58a6d6;
+    margin-top: -18px;
+    min-height: 18px;
+}
+
+#chatlog {
+    flex: 1;
+    overflow-y: auto;
+    margin-top: 12px;
+    padding: 8px;
+    border-radius: 10px;
+    background: rgba(8, 16, 28, .45);
+    border: 1px solid rgba(40, 90, 130, .25);
+    scrollbar-width: thin;
+}
+
+.msg {
+    margin: 6px 2px;
+    padding: 7px 11px;
+    border-radius: 10px;
+    font-size: 13.5px;
+    line-height: 1.45;
+    max-width: 88%;
+    word-wrap: break-word;
+}
+
+.msg.user {
+    margin-left: auto;
+    background: linear-gradient(135deg, rgba(35, 90, 140, .5), rgba(25, 70, 110, .4));
+    border: 1px solid rgba(90, 180, 255, .25);
+}
+
+.msg.jarvis {
+    margin-right: auto;
+    background: rgba(14, 32, 50, .75);
+    border: 1px solid rgba(60, 160, 220, .28);
+    color: #bfe6ff;
+}
+
+.hidden { display: none !important; }
+
+#approvalBox {
+    margin-top: 8px;
+    padding: 10px;
+    border-radius: 10px;
+    background: rgba(70, 40, 10, .35);
+    border: 1px solid rgba(255, 170, 60, .45);
+}
+
+#approvalText {
+    font-size: 13px;
+    color: #ffd9a0;
+    margin-bottom: 8px;
+}
+
+.approvalButtons { display: flex; gap: 8px; }
+
+.approvalButtons button {
+    flex: 1;
+    padding: 8px;
+    font-size: 12px;
+    letter-spacing: 2px;
+    border-radius: 7px;
+    cursor: pointer;
+}
+
+button.approve {
+    background: rgba(30, 120, 80, .4);
+    border: 1px solid rgba(80, 230, 160, .5);
+    color: #aaffdd;
+}
+
+button.deny {
+    background: rgba(130, 30, 30, .35);
+    border: 1px solid rgba(255, 100, 100, .45);
+    color: #ffb3b3;
+}
+
+.inputrow {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin: 10px 0 6px;
+}
+
+.inputrow button {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid #2a6f9e;
+    background: rgba(20, 55, 85, .55);
+    color: #7fd4ff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all .2s;
+    flex-shrink: 0;
+}
+
+#micBtn.listening {
+    background: rgba(0, 150, 190, .45);
+    box-shadow: 0 0 18px rgba(60, 210, 255, .8);
+    color: #eaffff;
+}
+
+#sendBtn { width: 38px; height: 38px; }
+
+#textInput {
+    flex: 1;
+    height: 42px;
+    border-radius: 22px;
+    border: 1px solid rgba(50, 110, 160, .5);
+    background: rgba(10, 22, 36, .8);
+    color: #d8efff;
+    padding: 0 16px;
+    font-size: 13.5px;
+    outline: none;
+}
+
+#textInput:focus { border-color: rgba(100, 200, 255, .7); }
