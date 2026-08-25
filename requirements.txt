@@ -7,6 +7,7 @@ pystray
 sounddevice
 numpy
 faster-whisper
+tokenizers
 edge-tts
 miniaudio
 openai
@@ -22,3 +23,5 @@ python-dotenv
 requests
 openwakeword
 onnxruntime
+speakeronnx
+imageio-ffmpeg

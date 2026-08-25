@@ -1,9 +1,12 @@
 import os
+import struct
 import threading
+import wave
 
 import numpy as np
 
 SAMPLE_RATE = 16000
+MODEL_NAME = "redimnet-b2"
 
 
 def data_dir():
@@ -36,13 +39,25 @@ def trim_silence(wav, frame_ms=30, top_db=28):
     return wav[start:end]
 
 
+def _save_temp_wav(audio_float32):
+    path = os.path.join(data_dir(), "_tmp_voice.wav")
+    audio = np.clip(np.asarray(audio_float32, dtype=np.float32), -1.0, 1.0)
+    pcm = (audio * 32767.0).astype("<i2")
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(SAMPLE_RATE)
+        w.writeframes(pcm.tobytes())
+    return path
+
+
 class VoiceID:
     def __init__(self):
-        self.encoder = None
-        self.embedding = None
-        self.threshold = 0.72
+        self.embedder = None
+        self.threshold = 0.55
         self._lock = threading.Lock()
         self.path = os.path.join(data_dir(), "owner_voice.npy")
+        self.embedding = None
         self.last_similarity = None
         self.load()
 
@@ -54,7 +69,7 @@ class VoiceID:
         if os.path.exists(self.path):
             try:
                 emb = np.load(self.path)
-                if emb.ndim == 1 and emb.shape[0] == 256:
+                if emb.ndim == 1 and 64 <= emb.shape[0] <= 1024:
                     self.embedding = emb
                     return True
             except Exception:
@@ -69,24 +84,29 @@ class VoiceID:
             except Exception:
                 pass
 
-    def _load_encoder(self):
-        if self.encoder is None:
-            from resemblyzer import VoiceEncoder
-            self.encoder = VoiceEncoder("cpu", verbose=False)
-        return self.encoder
+    def _load_embedder(self):
+        if self.embedder is None:
+            from speakeronnx import SpeakerEmbedder
+            self.embedder = SpeakerEmbedder(model=MODEL_NAME)
+        return self.embedder
 
     def _embed(self, wav):
-        enc = self._load_encoder()
+        enc = self._load_embedder()
         trimmed = trim_silence(np.asarray(wav, dtype=np.float32))
-        if len(trimmed) < SAMPLE_RATE * 0.8:
+        if len(trimmed) < SAMPLE_RATE:
             trimmed = wav
-        emb = enc.embed_utterance(trimmed.astype(np.float32))
+        wav_path = _save_temp_wav(trimmed)
+        with self._lock:
+            emb = enc.embed(wav_path)
+        try:
+            os.remove(wav_path)
+        except Exception:
+            pass
+        emb = np.asarray(emb, dtype=np.float32).flatten()
         return emb / (np.linalg.norm(emb) + 1e-9)
 
     def enroll(self, audio_samples):
-        embeddings = []
-        for wav in audio_samples:
-            embeddings.append(self._embed(wav))
+        embeddings = [self._embed(w) for w in audio_samples]
         mean_emb = np.mean(embeddings, axis=0)
         self.embedding = mean_emb / (np.linalg.norm(mean_emb) + 1e-9)
         try:
