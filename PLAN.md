@@ -132,5 +132,6 @@ models/                 bundled whisper models (gitignored)
 - [x] UI automation depth (launch_app, close_app, volume, media, focus, screenshot, OCR)
 
 ### Phase D — Polish
-- [ ] Morning briefing (weather/calendar/news)
-- [ ] Crash watchdog + auto-restart
+- [x] Crash watchdog (separate script, auto-restart, crash log, Telegram alert)
+- [x] Morning briefing (IP-based location, Tunisia news, weather, reminders)
+- [ ] Local vision: deferred (moondream2 downloaded, config disabled)
