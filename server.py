@@ -29,6 +29,9 @@ processing_lock = asyncio.Lock()
 current_state = "idle"
 main_loop = None
 listening_paused = False
+barge_in_enabled = True
+_barge_in_event = asyncio.Event()
+_barge_in_text = None
 
 SILENCE_THRESHOLD = 0.008
 SILENCE_DURATION = 0.7
@@ -210,10 +213,16 @@ async def api_memory_stats():
 
 
 async def think_and_speak(user_text):
+    global _barge_in_text
     await set_state("thinking")
+    if barge_in_enabled:
+        mic.start_stream()
     text_q = asyncio.Queue()
     speak_task = asyncio.create_task(speaker.speak_from_queue(text_q))
     parts = []
+    _barge_in_event.clear()
+    _barge_in_text = None
+    barge_task = asyncio.create_task(_barge_in_detector())
 
     async def on_chunk(chunk):
         parts.append(chunk)
@@ -233,6 +242,20 @@ async def think_and_speak(user_text):
     full_reply = "".join(parts) or reply
     await send_event({"type": "reply", "text": full_reply})
     await speak_task
+    barge_task.cancel()
+    try:
+        await barge_task
+    except asyncio.CancelledError:
+        pass
+
+    if _barge_in_text:
+        interrupted_text = _barge_in_text
+        _barge_in_text = None
+        print(f"[barge] processing interrupted input: {interrupted_text}")
+        await send_event({"type": "user_said", "text": interrupted_text})
+        await think_and_speak(interrupted_text)
+        return
+
     await set_state("idle")
 
 
@@ -306,6 +329,47 @@ async def text_flow(user_text):
     await send_event({"type": "user_said", "text": user_text})
     async with processing_lock:
         await think_and_speak(user_text)
+
+
+async def _barge_in_detector():
+    global _barge_in_text
+    barge_start = None
+    while True:
+        await asyncio.sleep(0.06)
+        if not barge_in_enabled:
+            barge_start = None
+            continue
+        if not speaker.speaking:
+            barge_start = None
+            continue
+        if current_state not in ("speaking", "thinking"):
+            barge_start = None
+            continue
+        if mic.level > SILENCE_THRESHOLD * 1.5:
+            if barge_start is None:
+                barge_start = time.time()
+            elif time.time() - barge_start > 0.2:
+                print("[barge] voice detected during speech — stopping")
+                speaker.stop()
+                _barge_in_event.set()
+                mic.begin_command_capture()
+                barge_start = None
+                await asyncio.sleep(0.08)
+                audio = await asyncio.to_thread(mic.end_command_capture)
+                if audio is not None and len(audio) / SAMPLE_RATE >= 0.5:
+                    from core.voiceid import voiceid as _vid
+                    if _vid.enrolled:
+                        ok = await asyncio.to_thread(_vid.verify, audio)
+                        if not ok:
+                            _barge_in_text = None
+                            continue
+                    text = await asyncio.to_thread(transcriber.transcribe_array, audio)
+                    if text:
+                        _barge_in_text = text
+                        await send_event({"type": "user_said", "text": text})
+                break
+        else:
+            barge_start = None
 
 
 def _on_wake_from_audio_thread():
