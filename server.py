@@ -327,7 +327,7 @@ async def voice_pipeline(play_intro):
             return
 
         await send_event({"type": "user_said", "text": user_text})
-        await think_and_speak(user_text, speaker=speaker_name)
+        await think_and_speak(user_text, speaker_name=speaker_name)
         asyncio.create_task(follow_up_window())
 
 
