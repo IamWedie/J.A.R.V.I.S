@@ -40,6 +40,8 @@ SYSTEM_PROMPT = (
     "'set an alarm'), use phone_agent — it autonomously takes screenshots, reads the screen, and executes "
     "the needed taps/swipes/types to accomplish the goal.\n"
     "- Never mention tools, JSON, or result mechanics; speak naturally.\n"
+    "- Match the user's language. If they speak Tunisian Derja (Arabic), reply in Derja written in Arabic script. "
+    "If they speak English, reply in English. If they mix languages, match their mix.\n"
     "- You can send messages to other devices on the network: use net_send_message with a device name "
     "('my TV', 'my phone') or IP address — JARVIS auto-routes via notification (phone), cast (TV), or HTTP. "
     "Use net_broadcast for all devices. Use net_read_messages to check incoming messages."

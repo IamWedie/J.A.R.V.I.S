@@ -34,6 +34,8 @@ STARTUP_SOUND = os.getenv("STARTUP_SOUND", "").strip()
 
 WAKE_ENABLED_DEFAULT = os.getenv("WAKE_ENABLED", "").strip().lower() in ("1", "true", "yes")
 CONVERSATION_TIMEOUT = int(os.getenv("CONVERSATION_TIMEOUT", "60").strip() or "60")
+STT_LANG = os.getenv("STT_LANG", "").strip() or None
+MULTILINGUAL = os.getenv("MULTILINGUAL", "").strip().lower() in ("1", "true", "yes")
 
 
 def resolve_path(p):

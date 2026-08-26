@@ -12,21 +12,25 @@ SAMPLE_RATE = 16000
 class Transcriber:
     def __init__(self):
         self._model = None
+        self._model_name = None
 
     def preload(self):
         return self._load()
 
     def _load(self):
-        if self._model is None:
-            from faster_whisper import WhisperModel
-            models_dir = config.models_dir()
-            local = os.path.join(models_dir, "tiny.en") if models_dir else ""
-            if local and os.path.isfile(os.path.join(local, "model.bin")):
-                print(f"[stt] using bundled model: {local}")
-                self._model = WhisperModel(local, device="cpu", compute_type="int8")
-            else:
-                print(f"[stt] using downloaded model: {config.STT_MODEL}")
-                self._model = WhisperModel(config.STT_MODEL, device="cpu", compute_type="int8")
+        model_name = getattr(config, "STT_MODEL", "tiny.en")
+        if self._model is not None and self._model_name == model_name:
+            return self._model
+        from faster_whisper import WhisperModel
+        models_dir = config.models_dir()
+        local = os.path.join(models_dir, model_name) if models_dir else ""
+        if local and os.path.isfile(os.path.join(local, "model.bin")):
+            print(f"[stt] using bundled model: {local}")
+            self._model = WhisperModel(local, device="cpu", compute_type="int8")
+        else:
+            print(f"[stt] using downloaded model: {model_name}")
+            self._model = WhisperModel(model_name, device="cpu", compute_type="int8")
+        self._model_name = model_name
         return self._model
 
     def transcribe_array(self, audio_float32):
@@ -34,9 +38,14 @@ class Transcriber:
         if duration < 0.6:
             return ""
         model = self._load()
+        lang = getattr(config, "STT_LANG", None)
+        if lang == "auto" or (lang is None and getattr(config, "MULTILINGUAL", False)):
+            lang = None
+        elif lang is None and "tiny.en" in getattr(config, "STT_MODEL", ""):
+            lang = "en"
         segments, info = model.transcribe(
             audio_float32,
-            language="en",
+            language=lang,
             beam_size=1,
             vad_filter=True,
             without_timestamps=True,
