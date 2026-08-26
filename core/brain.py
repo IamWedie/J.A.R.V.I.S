@@ -1044,14 +1044,18 @@ async def ask_vision(goal, screenshot_b64, context=""):
     local_url = getattr(config, "LOCAL_VISION_URL", "")
     if local_url:
         try:
-            local = AsyncOpenAI(base_url=local_url, api_key="local", timeout=90)
-            r = await asyncio.wait_for(local.chat.completions.create(
-                model=getattr(config, "LOCAL_VISION_MODEL", "moondream2"),
-                messages=messages, max_tokens=250,
-            ), timeout=90)
-            content = (r.choices[0].message.content or "").strip()
-            if content:
-                return content
+            import urllib.request
+            prompt = f"<image>\n{system_prompt}\n\nGoal: {goal}\n{context}"
+            payload = json.dumps({"prompt": prompt, "images": [screenshot_b64], "n_predict": 300}).encode()
+            req = urllib.request.Request(
+                f"{local_url}/completion", data=payload,
+                headers={"Content-Type": "application/json"}, method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                result = json.loads(resp.read())
+                content = (result.get("content") or "").strip()
+                if content:
+                    return content
         except Exception as e:
             print(f"[vision] local model unavailable ({str(e)[:80]}), trying cloud")
 
