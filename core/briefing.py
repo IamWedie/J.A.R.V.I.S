@@ -7,16 +7,7 @@ from core.greeter import _time_greeting
 
 
 def detect_city():
-    try:
-        r = urllib.request.urlopen("https://ipwho.is/", timeout=5)
-        data = json.loads(r.read())
-        city = data.get("city", "")
-        country = data.get("country", "")
-        if city:
-            return f"{city}, {country}" if country else city
-    except Exception:
-        pass
-    return "Tunisia"
+    return "Soliman"
 
 
 def get_weather(city="Tunis"):
