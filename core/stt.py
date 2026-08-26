@@ -7,7 +7,7 @@ import sounddevice as sd
 import core.config as config
 
 SAMPLE_RATE = 16000
-
+ALLOWED_LANGS = {"en", "ar"}
 
 class Transcriber:
     def __init__(self):
@@ -51,7 +51,23 @@ class Transcriber:
             without_timestamps=True,
             condition_on_previous_text=False,
         )
-        return " ".join(s.text.strip() for s in segments).strip()
+        text = " ".join(s.text.strip() for s in segments).strip()
+        detected = getattr(info, "language", None)
+        if lang is None and detected and detected not in ALLOWED_LANGS:
+            retry_lang = "ar"
+            segments2, _ = model.transcribe(
+                audio_float32,
+                language=retry_lang,
+                beam_size=1,
+                vad_filter=True,
+                without_timestamps=True,
+                condition_on_previous_text=False,
+            )
+            text2 = " ".join(s.text.strip() for s in segments2).strip()
+            if len(text2) >= len(text):
+                text = text2
+            print(f"[stt] auto-detected '{detected}' (not en/ar), used '{retry_lang}' instead")
+        return text
 
 
 transcriber = Transcriber()
