@@ -124,11 +124,13 @@ models/                 bundled whisper models (gitignored)
 - [ ] Reminders/alarms: background scheduler → voice + phone notification
 
 ### Phase C — Depth
-- [ ] Tunisian Derja: ar-TN-HediNeural voice + multilingual whisper + auto-detect
-- [ ] Auto-learning: extract facts from conversation automatically, correction upserts
-- [ ] Local vision: Moondream2 on RTX 2050 for offline phone agent eyes
-- [ ] Per-user voice ID personalization
-- [ ] Telegram bot brain (remote control)
+- [x] Derja prep: multilingual whisper STT (auto-detect), ar-TN-HediNeural voice, language-matching prompt
+      (activate via .env: STT_MODEL=small, STT_LANG=auto, TTS_VOICE=ar-TN-HediNeural)
+- [x] Auto-learning: pattern-based fact extraction, topic upserts, corrections overwrite
+- [x] Per-user voice ID: multi-profile identify(), attributed memories/facts, legacy migration
+- [x] Telegram bot brain: long-polling, owner-lock on /start, telegram_notify tool, reminder relay
+- [ ] Local vision: Moondream2 via llama-server (download running; setup_vision.py ready)
+- [ ] UI automation depth (per-app volume, WiFi/dark mode toggles)
 
 ### Phase D — Polish
 - [ ] Morning briefing (weather/calendar/news)
