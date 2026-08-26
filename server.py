@@ -329,6 +329,7 @@ async def voice_pipeline(play_intro):
         await send_event({"type": "user_said", "text": user_text})
         await think_and_speak(user_text, speaker_name=speaker_name)
         asyncio.create_task(follow_up_window())
+    update_wake_arm()
 
 
 async def text_flow(user_text):
@@ -337,6 +338,7 @@ async def text_flow(user_text):
     await send_event({"type": "user_said", "text": user_text})
     async with processing_lock:
         await think_and_speak(user_text)
+    update_wake_arm()
 
 
 CONVERSATION_FOLLOWUP = getattr(config, "CONVERSATION_TIMEOUT", 60)
@@ -395,6 +397,7 @@ async def follow_up_window():
     await send_event({"type": "state", "value": "listening"})
     async with processing_lock:
         await think_and_speak(user_text, speaker_name=fu_speaker)
+    update_wake_arm()
 
 
 async def _barge_in_detector():
@@ -726,6 +729,7 @@ async def startup_greeting():
             await set_state("speaking")
             await asyncio.get_running_loop().run_in_executor(None, play)
             await set_state("idle")
+        update_wake_arm()
         return
     from core.greeter import start_phrase
     phrase = start_phrase()
@@ -737,6 +741,7 @@ async def startup_greeting():
         except Exception as e:
             print(f"greeting speech failed: {e}")
         await set_state("idle")
+    update_wake_arm()
 
 
 AWAY_THRESHOLD_SECONDS = 15 * 60
@@ -779,3 +784,4 @@ async def speak_greeting(phrase):
             print(f"greeting speech failed: {e}")
         finally:
             await set_state("idle")
+    update_wake_arm()

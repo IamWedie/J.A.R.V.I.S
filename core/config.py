@@ -38,7 +38,7 @@ STT_LANG = os.getenv("STT_LANG", "").strip() or None
 MULTILINGUAL = os.getenv("MULTILINGUAL", "").strip().lower() in ("1", "true", "yes")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
-LOCAL_VISION_URL = os.getenv("LOCAL_VISION_URL", "").strip() or "http://127.0.0.1:8755/v1"
+LOCAL_VISION_URL = os.getenv("LOCAL_VISION_URL", "").strip() or "http://127.0.0.1:8755"
 LOCAL_VISION_MODEL = os.getenv("LOCAL_VISION_MODEL", "").strip() or "moondream2"
 
 
@@ -87,6 +87,7 @@ VOICE_CHOICES = [
     ("en-US-AriaNeural", "Aria (US female)"),
     ("en-US-GuyNeural", "Guy (deep US male, slow)"),
     ("en-GB-RyanNeural", "Ryan (British male)"),
+    ("ar-TN-HediNeural", "Hedi (Tunisian Arabic male)"),
 ]
 
 RATE_CHOICES = ["+0%", "+20%", "+30%", "+40%", "+50%"]

@@ -304,6 +304,7 @@ const VOICES = [
     ["en-US-AriaNeural", "Aria (US female)"],
     ["en-US-GuyNeural", "Guy (deep US male, slow)"],
     ["en-GB-RyanNeural", "Ryan (British male)"],
+    ["ar-TN-HediNeural", "Hedi (Tunisian Arabic male)"],
 ];
 
 for (const [id, label] of VOICES) {
@@ -312,7 +313,7 @@ for (const [id, label] of VOICES) {
     opt.textContent = label;
     voiceSelect.appendChild(opt);
 }
-voiceSelect.value = "en-US-AndrewNeural";
+voiceSelect.value = "en-US-BrianNeural";
 rateSelect.value = "+30%";
 
 function pushTtsSettings() {
