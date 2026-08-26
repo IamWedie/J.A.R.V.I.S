@@ -88,6 +88,7 @@ VOICE_CHOICES = [
     ("en-US-GuyNeural", "Guy (deep US male, slow)"),
     ("en-GB-RyanNeural", "Ryan (British male)"),
     ("ar-TN-HediNeural", "Hedi (Tunisian Arabic male)"),
+    ("ar-TN-ReemNeural", "Reem (Tunisian Arabic female)"),
 ]
 
 RATE_CHOICES = ["+0%", "+20%", "+30%", "+40%", "+50%"]

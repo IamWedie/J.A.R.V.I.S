@@ -305,6 +305,7 @@ const VOICES = [
     ["en-US-GuyNeural", "Guy (deep US male, slow)"],
     ["en-GB-RyanNeural", "Ryan (British male)"],
     ["ar-TN-HediNeural", "Hedi (Tunisian Arabic male)"],
+    ["ar-TN-ReemNeural", "Reem (Tunisian Arabic female)"],
 ];
 
 for (const [id, label] of VOICES) {
