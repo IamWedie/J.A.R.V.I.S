@@ -1,5 +1,6 @@
 import asyncio
 import ctypes
+import logging
 import os
 import sys
 import threading
@@ -10,24 +11,16 @@ import uvicorn
 import webview
 
 import core.config as config
+from core.logging_setup import setup_logging, get_logger
 from server import app, brain
+
+log = get_logger("app")
 
 MUTEX_NAME = "Wadia.JARVIS.SingleInstance"
 AUMID = "Wadia.JARVIS.App"
 LOCK_PORT = config.PORT + 1
 
 _lock_socket = None
-
-LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
-
-
-def setup_logging():
-    os.makedirs(LOG_DIR, exist_ok=True)
-    log_path = os.path.join(LOG_DIR, "app.log")
-    log_file = open(log_path, "a", buffering=1, encoding="utf-8")
-    sys.stdout = log_file
-    sys.stderr = log_file
-    print(f"\n===== JARVIS session {time.strftime('%Y-%m-%d %H:%M:%S')} =====")
 
 
 def guard_single_instance():
@@ -72,21 +65,17 @@ def preload():
     try:
         asyncio.run(brain.fetch_models())
     except Exception as e:
-        print(f"(startup notice: {e})")
+        log.warning("startup notice: %s", e)
     try:
         from core.stt import transcriber
         transcriber.preload()
-        print("whisper preloaded")
+        log.info("whisper preloaded")
     except Exception as e:
-        print(f"(whisper preload notice: {e})")
+        log.warning("whisper preload notice: %s", e)
 
 
 def set_taskbar_icon():
     def apply():
-        try:
-            import win32con  # not installed; fallback below
-        except ImportError:
-            pass
         try:
             hwnd = ctypes.windll.user32.FindWindowW(None, "JARVIS")
             if not hwnd:
@@ -102,17 +91,19 @@ def set_taskbar_icon():
             ICON_BIG = 1
             ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, hicon)
             ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, hicon)
-            print("taskbar icon applied")
+            log.info("taskbar icon applied")
         except Exception as e:
-            print(f"taskbar icon failed: {e}")
+            log.warning("taskbar icon failed: %s", e)
 
     threading.Timer(3.0, apply).start()
 
 
 if __name__ == "__main__":
     setup_logging()
+    log.info("JARVIS session starting")
+
     if not guard_single_instance():
-        print("JARVIS is already running.")
+        log.warning("JARVIS is already running")
         sys.exit(0)
 
     set_app_user_model_id()
@@ -140,9 +131,9 @@ if __name__ == "__main__":
         def hide_when_ready():
             try:
                 window.hide()
-                print("boot: started hidden in tray")
+                log.info("started hidden in tray")
             except Exception as e:
-                print(f"hide failed: {e}")
+                log.warning("hide failed: %s", e)
         window.events.loaded += hide_when_ready
 
     def on_pause(paused):
@@ -156,7 +147,7 @@ if __name__ == "__main__":
                 server.update_wake_arm()
         except RuntimeError:
             pass
-        print(f"listening paused: {paused}")
+        log.info("listening paused: %s", paused)
 
     set_pause_callback(on_pause)
 

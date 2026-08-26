@@ -3,6 +3,10 @@ import threading
 import time
 from datetime import datetime, timedelta
 
+from core.logging_setup import get_logger
+
+log = get_logger("scheduler")
+
 _reminders = []
 _lock = threading.Lock()
 _main_loop = None
@@ -90,7 +94,7 @@ def _check_reminders():
 
 def _fire(reminder):
     msg = reminder["message"]
-    print(f"[reminder] firing: {msg}")
+    log.info("firing: %s", msg)
     if _main_loop and _fired_callback:
         try:
             _main_loop.call_soon_threadsafe(

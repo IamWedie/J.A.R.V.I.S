@@ -5,6 +5,9 @@ import numpy as np
 import sounddevice as sd
 
 import core.config as config
+from core.logging_setup import get_logger
+
+log = get_logger("stt")
 
 SAMPLE_RATE = 16000
 ALLOWED_LANGS = {"en", "ar"}
@@ -25,10 +28,10 @@ class Transcriber:
         models_dir = config.models_dir()
         local = os.path.join(models_dir, model_name) if models_dir else ""
         if local and os.path.isfile(os.path.join(local, "model.bin")):
-            print(f"[stt] using bundled model: {local}")
+            log.info("using bundled model: %s", local)
             self._model = WhisperModel(local, device="cpu", compute_type="int8")
         else:
-            print(f"[stt] using downloaded model: {model_name}")
+            log.info("using downloaded model: %s", model_name)
             self._model = WhisperModel(model_name, device="cpu", compute_type="int8")
         self._model_name = model_name
         return self._model
@@ -66,7 +69,7 @@ class Transcriber:
             text2 = " ".join(s.text.strip() for s in segments2).strip()
             if len(text2) >= len(text):
                 text = text2
-            print(f"[stt] auto-detected '{detected}' (not en/ar), used '{retry_lang}' instead")
+            log.warning("auto-detected '%s' (not en/ar), used '%s' instead", detected, retry_lang)
         return text
 
 

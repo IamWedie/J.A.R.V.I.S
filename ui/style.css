@@ -1,5 +1,92 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+body {
+    background: radial-gradient(ellipse at 50% 30%, #0d1526 0%, #070b14 70%);
+    color: #cfe9ff;
+    font-family: "Rajdhani", "Segoe UI", sans-serif;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* focus visible for keyboard nav */
+:focus-visible {
+    outline: 2px solid rgba(100, 200, 255, .8);
+    outline-offset: 2px;
+}
+
+/* === TOAST SYSTEM === */
+#toastContainer {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+    max-width: 360px;
+}
+
+.toast {
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #eaf8ff;
+    pointer-events: auto;
+    animation: toastIn .3s ease-out;
+    backdrop-filter: blur(12px);
+    border: 1px solid;
+}
+
+.toast.info {
+    background: rgba(20, 55, 100, .85);
+    border-color: rgba(90, 190, 255, .4);
+}
+.toast.success {
+    background: rgba(20, 80, 55, .85);
+    border-color: rgba(80, 230, 160, .4);
+}
+.toast.warning {
+    background: rgba(80, 60, 20, .85);
+    border-color: rgba(255, 180, 60, .4);
+}
+.toast.error {
+    background: rgba(100, 30, 30, .85);
+    border-color: rgba(255, 100, 100, .4);
+}
+
+.toast.fadeout {
+    animation: toastOut .3s ease-in forwards;
+}
+
+@keyframes toastIn {
+    from { opacity: 0; transform: translateX(40px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+@keyframes toastOut {
+    from { opacity: 1; transform: translateX(0); }
+    to { opacity: 0; transform: translateX(40px); }
+}
+
+/* === LOADING SPINNER === */
+.spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(90, 190, 255, .3);
+    border-top-color: #6fd3ff;
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* === ENROLL BANNER === */
 #enrollBanner {
     position: fixed;
     left: 12px;
@@ -13,7 +100,6 @@
     text-align: center;
     box-shadow: 0 0 24px rgba(50,170,255,.25);
 }
-
 #enrollBanner.hidden { display: none !important; }
 
 #enrollStep {
@@ -22,21 +108,19 @@
     color: #6fb8e0;
     margin-bottom: 8px;
 }
-
 #enrollPhrase {
     font-size: 17px;
     line-height: 1.4;
     color: #eaf8ff;
     font-weight: 600;
 }
-
 #enrollHint {
     font-size: 10.5px;
     color: #7fa8c4;
     margin-top: 8px;
 }
 
-
+/* === SETUP WIZARD === */
 #setupWizard {
     position: fixed;
     inset: 0;
@@ -45,7 +129,6 @@
     padding: 26px 22px;
     overflow-y: auto;
 }
-
 .wizTitle {
     font-size: 17px;
     letter-spacing: 7px;
@@ -54,14 +137,12 @@
     text-align: center;
     margin-bottom: 18px;
 }
-
 .wizHeading {
     font-size: 14.5px;
     letter-spacing: 2px;
     color: #9fdcff;
     margin-bottom: 10px;
 }
-
 .wizStep { margin-bottom: 16px; }
 .wizStep.hidden, #wizDone.hidden { display: none !important; }
 
@@ -78,7 +159,6 @@
     white-space: pre-wrap;
     margin-bottom: 10px;
 }
-
 .agreeRow {
     display: flex;
     gap: 8px;
@@ -87,7 +167,6 @@
     color: #cfe9ff;
     margin-bottom: 12px;
 }
-
 #keyInput {
     width: 100%;
     height: 42px;
@@ -97,10 +176,10 @@
     color: #d8efff;
     padding: 0 12px;
     font-size: 13px;
+    font-family: inherit;
     outline: none;
     margin-bottom: 10px;
 }
-
 #wizardModelSelect {
     width: 100%;
     height: 170px;
@@ -112,18 +191,17 @@
     padding: 6px;
     margin-bottom: 10px;
 }
-
 #wizStep2 .hint, #wizStep3 .hint, #wizStep4 .hint {
     font-size: 11.5px;
     color: #7fa8c4;
     margin-bottom: 10px;
     line-height: 1.45;
 }
-
 .wizBtn {
     width: 100%;
     padding: 11px;
     font-size: 12.5px;
+    font-family: inherit;
     letter-spacing: 2.5px;
     border-radius: 8px;
     cursor: pointer;
@@ -131,7 +209,6 @@
     border: 1px solid rgba(90,190,255,.45);
     color: #eaf8ff;
 }
-
 .wizBtn:disabled { opacity: .35; cursor: default; }
 .wizBtn.skip { background: rgba(60,60,60,.35); border-color: rgba(150,150,150,.35); }
 
@@ -143,15 +220,35 @@
 }
 #keyStatus.ok { color: #7dffc8; }
 
-
-body {
-    background: radial-gradient(ellipse at 50% 30%, #0d1526 0%, #070b14 70%);
-    color: #cfe9ff;
-    font-family: "Segoe UI", "Rajdhani", sans-serif;
-    height: 100vh;
-    overflow: hidden;
+/* system check */
+#checkResults {
+    margin: 12px 0;
+}
+.checkRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    margin-bottom: 4px;
+    border-radius: 8px;
+    background: rgba(8, 16, 28, .5);
+    font-size: 13px;
+    color: #9fdcff;
+    border: 1px solid rgba(40, 90, 130, .2);
+}
+.checkRow.ok {
+    color: #7dffc8;
+    border-color: rgba(80, 230, 160, .25);
+}
+.checkRow.fail {
+    color: #ffb3b3;
+    border-color: rgba(255, 100, 100, .25);
+}
+.checkRow .spinner {
+    margin-right: 4px;
 }
 
+/* === MAIN APP === */
 #app {
     display: flex;
     flex-direction: column;
@@ -167,7 +264,6 @@ body {
     justify-content: space-between;
     align-items: center;
 }
-
 .controls {
     display: flex;
     gap: 6px;
@@ -180,11 +276,11 @@ body {
     border: 1px solid #1e4a6e;
     border-radius: 6px;
     font-size: 10px;
+    font-family: inherit;
     padding: 5px 8px;
     cursor: pointer;
     letter-spacing: 1px;
 }
-
 #wakeBtn.on {
     color: #7dffc8;
     border-color: rgba(80, 230, 170, .55);
@@ -209,7 +305,6 @@ body {
     background: rgba(10, 22, 36, .85);
     border-radius: 10px;
 }
-
 .settingsRow {
     display: flex;
     justify-content: space-between;
@@ -217,7 +312,6 @@ body {
     color: #9fd2ef;
     margin-bottom: 8px;
 }
-
 #voiceStatus.active { color: #7dffc8; }
 
 #settingsPanel button {
@@ -225,6 +319,7 @@ body {
     padding: 7px;
     margin-bottom: 6px;
     font-size: 11.5px;
+    font-family: inherit;
     letter-spacing: 1.5px;
     border-radius: 7px;
     cursor: pointer;
@@ -232,28 +327,27 @@ body {
     border: 1px solid #2a6f9e;
     color: #9fdcff;
 }
+#settingsPanel button.danger {
+    border-color: rgba(255, 100, 100, .45);
+    color: #ffb3b3;
+    background: rgba(130, 30, 30, .25);
+}
+#settingsPanel .hint {
+    font-size: 10.5px;
+    color: #5f8aa8;
+    line-height: 1.4;
+}
 
 #voiceSelect, #rateSelect {
     width: 100%;
     padding: 6px;
     margin-bottom: 6px;
     font-size: 11.5px;
+    font-family: inherit;
     border-radius: 7px;
     border: 1px solid #1e4a6e;
     background: rgba(20, 40, 65, .8);
     color: #8fd8ff;
-}
-
-#settingsPanel button.danger {
-    border-color: rgba(255, 100, 100, .45);
-    color: #ffb3b3;
-    background: rgba(130, 30, 30, .25);
-}
-
-#settingsPanel .hint {
-    font-size: 10.5px;
-    color: #5f8aa8;
-    line-height: 1.4;
 }
 
 .title {
@@ -270,6 +364,7 @@ body {
     border: 1px solid #1e4a6e;
     border-radius: 6px;
     font-size: 10.5px;
+    font-family: inherit;
     padding: 4px 4px;
     max-width: 118px;
 }
@@ -293,6 +388,19 @@ body {
     min-height: 18px;
 }
 
+#offlineBanner {
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: #ffb3b3;
+    background: rgba(100, 30, 30, .3);
+    border: 1px solid rgba(255, 100, 100, .25);
+    border-radius: 6px;
+    padding: 6px 10px;
+    margin-top: 4px;
+}
+#offlineBanner.hidden { display: none; }
+
 #chatlog {
     flex: 1;
     overflow-y: auto;
@@ -313,13 +421,11 @@ body {
     max-width: 88%;
     word-wrap: break-word;
 }
-
 .msg.user {
     margin-left: auto;
     background: linear-gradient(135deg, rgba(35, 90, 140, .5), rgba(25, 70, 110, .4));
     border: 1px solid rgba(90, 180, 255, .25);
 }
-
 .msg.jarvis {
     margin-right: auto;
     background: rgba(14, 32, 50, .75);
@@ -336,30 +442,26 @@ body {
     background: rgba(70, 40, 10, .35);
     border: 1px solid rgba(255, 170, 60, .45);
 }
-
 #approvalText {
     font-size: 13px;
     color: #ffd9a0;
     margin-bottom: 8px;
 }
-
 .approvalButtons { display: flex; gap: 8px; }
-
 .approvalButtons button {
     flex: 1;
     padding: 8px;
     font-size: 12px;
+    font-family: inherit;
     letter-spacing: 2px;
     border-radius: 7px;
     cursor: pointer;
 }
-
 button.approve {
     background: rgba(30, 120, 80, .4);
     border: 1px solid rgba(80, 230, 160, .5);
     color: #aaffdd;
 }
-
 button.deny {
     background: rgba(130, 30, 30, .35);
     border: 1px solid rgba(255, 100, 100, .45);
@@ -372,7 +474,6 @@ button.deny {
     align-items: center;
     margin: 10px 0 6px;
 }
-
 .inputrow button {
     width: 44px;
     height: 44px;
@@ -387,13 +488,11 @@ button.deny {
     transition: all .2s;
     flex-shrink: 0;
 }
-
 #micBtn.listening {
     background: rgba(0, 150, 190, .45);
     box-shadow: 0 0 18px rgba(60, 210, 255, .8);
     color: #eaffff;
 }
-
 #sendBtn { width: 38px; height: 38px; }
 
 #textInput {
@@ -405,7 +504,29 @@ button.deny {
     color: #d8efff;
     padding: 0 16px;
     font-size: 13.5px;
+    font-family: inherit;
     outline: none;
 }
-
 #textInput:focus { border-color: rgba(100, 200, 255, .7); }
+
+/* === RESPONSIVE === */
+@media (max-width: 480px) {
+    #app { padding: 6px 8px; }
+    .title { font-size: 11px; letter-spacing: 2px; }
+    #modelSelect { max-width: 80px; font-size: 9px; }
+    #wakeBtn { font-size: 9px; padding: 4px 6px; }
+    #face { height: 30vh; min-height: 140px; }
+    .msg { font-size: 12.5px; max-width: 92%; }
+    #toastContainer { right: 8px; top: 8px; max-width: 280px; }
+    .toast { font-size: 12px; padding: 10px 12px; }
+}
+
+@media (min-width: 768px) {
+    #app { max-width: 640px; }
+    #face { max-width: 520px; height: 48vh; }
+}
+
+@media (min-width: 1200px) {
+    #app { max-width: 720px; }
+    #face { max-width: 600px; height: 52vh; }
+}

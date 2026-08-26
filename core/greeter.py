@@ -3,6 +3,9 @@ import random
 from datetime import datetime
 
 import core.config as config
+from core.logging_setup import get_logger
+
+log = get_logger("greeter")
 
 
 def get_idle_seconds():

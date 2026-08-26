@@ -8,6 +8,10 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+from core.logging_setup import get_logger
+
+log = get_logger("netdiscovery")
+
 OUI_VENDORS = {
     "00:1A:11": "Google", "F4:F5:D8": "Google", "30:FD:38": "Google",
     "A4:B3:05": "Honor", "8C:55:4A": "Honor", "5C:B3:95": "Huawei",
@@ -157,7 +161,7 @@ def _mdns_scan(duration=4.0):
         zc.close()
         found = results
     except Exception as e:
-        print(f"mdns scan failed: {e}")
+        log.warning("mdns scan failed: %s", e)
     return found
 
 
@@ -188,7 +192,7 @@ def _ssdp_scan(duration=3.0):
                 continue
         s.close()
     except Exception as e:
-        print(f"ssdp scan failed: {e}")
+        log.warning("ssdp scan failed: %s", e)
     return found
 
 
@@ -277,7 +281,7 @@ def scan_now():
         from core import memory
         memory.save_devices(dev_list)
     except Exception as e:
-        print(f"device cache save failed: {e}")
+        log.error("device cache save failed: %s", e)
     return dev_list
 
 

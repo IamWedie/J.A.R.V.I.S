@@ -1,4 +1,8 @@
 let ws;
+let reconnectDelay = 1000;
+let reconnectTimer = null;
+const MAX_RECONNECT = 30000;
+
 const chatlog = document.getElementById('chatlog');
 const micBtn = document.getElementById('micBtn');
 const textInput = document.getElementById('textInput');
@@ -14,6 +18,21 @@ const voiceStatusEl = document.getElementById('voiceStatus');
 const wizard = document.getElementById('setupWizard');
 let validatedKey = null;
 
+/* === TOAST SYSTEM === */
+function showToast(text, type = 'info', duration = 4000) {
+    const container = document.getElementById('toastContainer');
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = text;
+    el.setAttribute('role', 'status');
+    container.appendChild(el);
+    setTimeout(() => {
+        el.classList.add('fadeout');
+        el.addEventListener('animationend', () => el.remove());
+    }, duration);
+}
+
+/* === SETUP WIZARD === */
 async function maybeRunSetup() {
     try {
         const r = await fetch('/api/setup_status');
@@ -36,24 +55,29 @@ document.getElementById('agreeChk').addEventListener('change', e => {
 document.getElementById('agreeBtn').addEventListener('click', () => {
     document.getElementById('wizStep1').classList.add('hidden');
     document.getElementById('wizStep2').classList.remove('hidden');
+    document.getElementById('keyInput').focus();
 });
 
 document.getElementById('validateKeyBtn').addEventListener('click', async () => {
     const key = document.getElementById('keyInput').value.trim();
     const status = document.getElementById('keyStatus');
+    const btn = document.getElementById('validateKeyBtn');
     if (!key) { status.textContent = 'Paste a key first.'; return; }
     status.className = '';
-    status.textContent = 'Validating...';
+    status.innerHTML = '<span class="spinner"></span>Validating...';
+    btn.disabled = true;
     const r = await fetch('/api/setup_validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key }),
     });
     const d = await r.json();
+    btn.disabled = false;
     if (!d.ok) { status.textContent = d.error; return; }
     validatedKey = key;
     status.className = 'ok';
     status.textContent = `Key valid - ${d.models.length} models available.`;
+    showToast('API key validated successfully', 'success');
     const sel = document.getElementById('wizardModelSelect');
     sel.innerHTML = '';
     for (const m of d.models) {
@@ -64,12 +88,48 @@ document.getElementById('validateKeyBtn').addEventListener('click', async () => 
         sel.appendChild(opt);
     }
     document.getElementById('wizStep2').classList.add('hidden');
+    document.getElementById('wizStep3Check').classList.remove('hidden');
+    runSystemCheck();
+});
+
+/* === SYSTEM CHECK === */
+async function runSystemCheck() {
+    const ids = { microphone: 'checkMic', speaker: 'checkSpeaker', internet: 'checkInternet', stt_model: 'checkSTT' };
+    try {
+        const r = await fetch('/api/system_check');
+        const d = await r.json();
+        let allOk = true;
+        for (const [key, elId] of Object.entries(ids)) {
+            const el = document.getElementById(elId);
+            const ok = d[key];
+            el.className = 'checkRow ' + (ok ? 'ok' : 'fail');
+            el.innerHTML = (ok ? '&#10003;' : '&#10007;') + ' ' + el.textContent.replace(/^.*?(Microphone|Speakers|Internet|Voice engine)/, '$1');
+            if (!ok) allOk = false;
+        }
+        const nextBtn = document.getElementById('checkNextBtn');
+        nextBtn.disabled = false;
+        if (allOk) {
+            showToast('All systems ready', 'success');
+        } else {
+            showToast('Some checks failed — you may have issues', 'warning');
+        }
+    } catch {
+        showToast('Could not run system check', 'warning');
+        document.getElementById('checkNextBtn').disabled = false;
+    }
+}
+
+document.getElementById('checkNextBtn').addEventListener('click', () => {
+    document.getElementById('wizStep3Check').classList.add('hidden');
     document.getElementById('wizStep3').classList.remove('hidden');
 });
 
 document.getElementById('saveModelBtn').addEventListener('click', async () => {
     const model = document.getElementById('wizardModelSelect').value;
     if (!model || !validatedKey) return;
+    const btn = document.getElementById('saveModelBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Saving...';
     await fetch('/api/setup_complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -77,6 +137,9 @@ document.getElementById('saveModelBtn').addEventListener('click', async () => {
     });
     send({ cmd: 'model', model });
     loadModels();
+    btn.disabled = false;
+    btn.textContent = 'SAVE & CONTINUE';
+    showToast(`Brain set to ${model}`, 'success');
     document.getElementById('wizStep3').classList.add('hidden');
     document.getElementById('wizStep4').classList.remove('hidden');
 });
@@ -87,13 +150,17 @@ document.getElementById('wizEnrollBtn').addEventListener('click', () => {
 });
 
 document.getElementById('wizSkipBtn').addEventListener('click', finishWizard);
-document.getElementById('wizFinishBtn').addEventListener('click', () => wizard.classList.add('hidden'));
+document.getElementById('wizFinishBtn').addEventListener('click', () => {
+    wizard.classList.add('hidden');
+    showToast('JARVIS is ready', 'success');
+});
 
 async function finishWizard() {
     document.getElementById('wizStep4').classList.add('hidden');
     document.getElementById('wizDone').classList.remove('hidden');
 }
 
+/* === VOICE STATUS === */
 function updateVoiceStatus(enrolled) {
     voiceStatusEl.textContent = enrolled ? 'ACTIVE - owner only' : 'OFF - not enrolled';
     voiceStatusEl.classList.toggle('active', !!enrolled);
@@ -116,18 +183,24 @@ function showEnrollBanner(msg) {
     enrollBanner.classList.remove('hidden');
 }
 
-function hideEnrollBanner() {
-    enrollBanner.classList.add('hidden');
-}
+function hideEnrollBanner() { enrollBanner.classList.add('hidden'); }
+function setEnrollStatus(text) { voiceStatusEl.textContent = text; }
 
-function setEnrollStatus(text) {
-    voiceStatusEl.textContent = text;
-}
-
+/* === WEBSOCKET === */
 function connect() {
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
     ws = new WebSocket(`ws://${location.host}/ws`);
+    ws.onopen = () => {
+        reconnectDelay = 1000;
+        document.getElementById('status').textContent = 'Online';
+    };
     ws.onmessage = onMessage;
-    ws.onclose = () => setTimeout(connect, 1500);
+    ws.onclose = () => {
+        document.getElementById('status').textContent = 'Reconnecting...';
+        reconnectTimer = setTimeout(connect, reconnectDelay);
+        reconnectDelay = Math.min(reconnectDelay * 1.5, MAX_RECONNECT);
+    };
+    ws.onerror = () => ws.close();
 }
 
 function onMessage(ev) {
@@ -161,6 +234,8 @@ function onMessage(ev) {
         case 'approval_request':
             approvalText.textContent = 'JARVIS wants to: ' + msg.description;
             approvalBox.classList.remove('hidden');
+            document.getElementById('btnApprove').focus();
+            showToast('Action requires approval', 'warning', 8000);
             break;
         case 'cleared':
             chatlog.innerHTML = '';
@@ -168,6 +243,7 @@ function onMessage(ev) {
             break;
         case 'memory_wiped':
             addMsg('Memory wiped. I remember nothing, sir.', 'jarvis');
+            showToast('Memory wiped', 'info');
             break;
         case 'history_batch':
             for (const item of msg.items) {
@@ -190,6 +266,7 @@ function onMessage(ev) {
         case 'enroll_done':
             hideEnrollBanner();
             setEnrollStatus('Fingerprint saved.');
+            showToast('Voice fingerprint enrolled', 'success');
             if (!wizard.classList.contains('hidden')) {
                 finishWizard();
             } else {
@@ -201,10 +278,16 @@ function onMessage(ev) {
             break;
         case 'voice_rejected':
             addMsg('[unrecognized voice ignored]', 'jarvis');
+            showToast('Unrecognized voice - access denied', 'warning');
             break;
         case 'error':
             hideEnrollBanner();
             addMsg('Error: ' + msg.message, 'jarvis');
+            showToast(msg.message, 'error', 6000);
+            break;
+        case 'update_available':
+            showToast(`Update available: v${msg.latest} (you have v${msg.current})`, 'info', 10000);
+            addMsg(`A new version (v${msg.latest}) is available at ${msg.url}`, 'jarvis');
             break;
     }
 }
@@ -227,8 +310,8 @@ function addMsg(text, who) {
 
 let liveBubble = null;
 
+/* === INPUT === */
 micBtn.addEventListener('click', () => send({ cmd: 'listen' }));
-
 sendBtn.addEventListener('click', submitText);
 textInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitText(); });
 
@@ -239,6 +322,7 @@ function submitText() {
     send({ cmd: 'chat', text });
 }
 
+/* === APPROVAL === */
 document.getElementById('btnApprove').addEventListener('click', () => {
     approvalBox.classList.add('hidden');
     send({ cmd: 'approval', approved: true });
@@ -248,6 +332,7 @@ document.getElementById('btnDeny').addEventListener('click', () => {
     send({ cmd: 'approval', approved: false });
 });
 
+/* === MODELS === */
 async function loadModels() {
     try {
         const res = await fetch('/api/models');
@@ -271,13 +356,18 @@ async function loadModels() {
 modelSelect.addEventListener('change', () => send({ cmd: 'model', model: modelSelect.value }));
 wakeBtn.addEventListener('click', () => send({ cmd: 'wake_toggle', enabled: wakeBtn.textContent.includes('OFF') }));
 
-settingsBtn.addEventListener('click', () => settingsPanel.classList.toggle('hidden'));
+/* === SETTINGS === */
+settingsBtn.addEventListener('click', () => {
+    const open = settingsPanel.classList.toggle('hidden');
+    settingsBtn.setAttribute('aria-expanded', !open);
+});
 document.getElementById('enrollBtn').addEventListener('click', () => {
     setEnrollStatus('Preparing...');
     send({ cmd: 'enroll' });
 });
 document.getElementById('resetVoiceBtn').addEventListener('click', () => {
     send({ cmd: 'voice_reset' });
+    showToast('Voice fingerprint reset', 'info');
 });
 document.getElementById('wipeMemoryBtn').addEventListener('click', () => {
     if (confirm('Erase ALL memories and conversations permanently?')) {
@@ -294,6 +384,7 @@ async function loadMemoryStats() {
     } catch {}
 }
 
+/* === TTS === */
 const voiceSelect = document.getElementById('voiceSelect');
 const rateSelect = document.getElementById('rateSelect');
 
@@ -314,8 +405,8 @@ for (const [id, label] of VOICES) {
     opt.textContent = label;
     voiceSelect.appendChild(opt);
 }
-voiceSelect.value = "en-US-BrianNeural";
-rateSelect.value = "+30%";
+voiceSelect.value = "ar-TN-HediNeural";
+rateSelect.value = "+0%";
 
 function pushTtsSettings() {
     send({ cmd: 'tts_settings', voice: voiceSelect.value, rate: rateSelect.value });
@@ -323,9 +414,27 @@ function pushTtsSettings() {
 
 voiceSelect.addEventListener('change', pushTtsSettings);
 rateSelect.addEventListener('change', pushTtsSettings);
-document.getElementById('testVoiceBtn').addEventListener('click', () => send({ cmd: 'tts_test' }));
+document.getElementById('testVoiceBtn').addEventListener('click', () => {
+    send({ cmd: 'tts_test' });
+    showToast('Testing voice...', 'info', 2000);
+});
 
+/* === INIT === */
 connect();
 loadModels();
 maybeRunSetup();
 loadMemoryStats();
+
+/* === HEALTH CHECK === */
+const offlineBanner = document.getElementById('offlineBanner');
+async function checkHealth() {
+    try {
+        const r = await fetch('/api/health');
+        const d = await r.json();
+        offlineBanner.classList.toggle('hidden', d.online);
+    } catch {
+        offlineBanner.classList.remove('hidden');
+    }
+}
+setInterval(checkHealth, 30000);
+checkHealth();

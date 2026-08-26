@@ -3,6 +3,10 @@ import json
 import urllib.request
 from datetime import datetime
 
+from core.logging_setup import get_logger
+
+log = get_logger("briefing")
+
 from core.greeter import _time_greeting
 
 

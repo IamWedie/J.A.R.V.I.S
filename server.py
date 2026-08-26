@@ -7,6 +7,7 @@ import numpy as np
 import sounddevice as sd
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 import core.config as config
@@ -18,8 +19,17 @@ from core.voiceid import voiceid
 from core.net import netmsg
 
 from datetime import datetime
+from core.logging_setup import get_logger
+
+log = get_logger("server")
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:8741", "http://localhost:8741"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 UI_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
 
@@ -206,6 +216,42 @@ async def api_terms():
         return {"text": f.read()}
 
 
+@app.get("/api/health")
+async def api_health():
+    online = False
+    try:
+        import urllib.request
+        urllib.request.urlopen("https://www.google.com", timeout=3)
+        online = True
+    except Exception:
+        pass
+    return {"online": online, "version": config.VERSION}
+
+
+@app.get("/api/system_check")
+async def api_system_check():
+    checks = {}
+    try:
+        import sounddevice as sd
+        devs = sd.query_devices()
+        has_mic = any(d["max_input_channels"] > 0 for d in devs)
+        has_speaker = any(d["max_output_channels"] > 0 for d in devs)
+        checks["microphone"] = has_mic
+        checks["speaker"] = has_speaker
+    except Exception:
+        checks["microphone"] = False
+        checks["speaker"] = False
+    try:
+        import urllib.request
+        urllib.request.urlopen("https://www.google.com", timeout=3)
+        checks["internet"] = True
+    except Exception:
+        checks["internet"] = False
+    checks["voice_engine"] = True
+    checks["stt_model"] = bool(config.STT_MODEL)
+    return checks
+
+
 @app.get("/api/memory_stats")
 async def api_memory_stats():
     from core import memory
@@ -257,7 +303,7 @@ async def think_and_speak(user_text, speaker_name=None):
     if _barge_in_text:
         interrupted_text, barge_speaker = _barge_in_text
         _barge_in_text = None
-        print(f"[barge] processing interrupted input: {interrupted_text}")
+        log.info(f"[barge] processing interrupted input: {interrupted_text}")
         await send_event({"type": "user_said", "text": interrupted_text})
         await think_and_speak(interrupted_text, speaker_name=barge_speaker)
         return
@@ -418,7 +464,7 @@ async def _barge_in_detector():
             if barge_start is None:
                 barge_start = time.time()
             elif time.time() - barge_start > 0.2:
-                print("[barge] voice detected during speech — stopping")
+                log.info("[barge] voice detected during speech — stopping")
                 speaker.stop()
                 _barge_in_event.set()
                 mic.begin_command_capture()
@@ -487,7 +533,7 @@ async def websocket_endpoint(ws: WebSocket):
                 "text": item["text"],
             }))
     except Exception as e:
-        print(f"history send failed: {e}")
+        log.warning(f"history send failed: {e}")
     try:
         while True:
             raw = await ws.receive_text()
@@ -527,8 +573,7 @@ async def websocket_endpoint(ws: WebSocket):
                     config.save_settings({"WAKE_ENABLED": "1" if enabled else "0"})
                     await send_event({"type": "wake", "enabled": mic.wake_enabled})
                 except Exception as e:
-                    import traceback
-                    traceback.print_exc()
+                    log.warning(f"wake toggle failed: {e}", exc_info=True)
                     await send_event({"type": "error", "message": f"Wake toggle failed: {e}"} )
             elif cmd == "tts_settings":
                 try:
@@ -634,8 +679,7 @@ async def safe_enroll_flow():
     try:
         await enroll_flow()
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        log.warning(f"enroll flow failed: {e}", exc_info=True)
         await send_event({"type": "error", "message": str(e)})
         await set_state("idle")
 
@@ -649,17 +693,40 @@ async def test_voice():
             await set_state("speaking")
             await speaker.speak("Voice check complete, sir. I am listening at your convenience.")
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            log.warning(f"voice test failed: {e}", exc_info=True)
             await send_event({"type": "error", "message": f"Voice test failed: {e}"})
         finally:
             await set_state("idle")
+
+
+async def _check_for_updates():
+    await asyncio.sleep(10)
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            "https://api.github.com/repos/IamWedie/J.A.R.V.I.S/releases/latest",
+            headers={"Accept": "application/vnd.github.v3+json"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+            latest = data.get("tag_name", "").lstrip("v")
+            if latest and latest != config.VERSION:
+                log.info("Update available: %s (current: %s)", latest, config.VERSION)
+                await send_event({
+                    "type": "update_available",
+                    "current": config.VERSION,
+                    "latest": latest,
+                    "url": data.get("html_url", ""),
+                })
+    except Exception:
+        pass
 
 
 @app.on_event("startup")
 async def startup():
     global main_loop
     main_loop = asyncio.get_running_loop()
+    asyncio.create_task(_check_for_updates())
     mic.on_wake = _on_wake_from_audio_thread
     if config.WAKE_ENABLED_DEFAULT:
         try:
@@ -667,7 +734,7 @@ async def startup():
             update_wake_arm()
             await send_event({"type": "wake", "enabled": mic.wake_enabled})
         except Exception as e:
-            print(f"wake autostart failed: {e}")
+            log.warning(f"wake autostart failed: {e}")
     asyncio.create_task(level_broadcaster())
     asyncio.create_task(startup_greeting())
     asyncio.create_task(away_watcher())
@@ -692,7 +759,7 @@ async def startup():
         from core.net import telegram_bot
         telegram_bot.start()
     except Exception as e:
-        print(f"telegram start failed: {e}")
+        log.warning(f"telegram start failed: {e}")
 
 
 _startup_audio = None
@@ -718,13 +785,13 @@ async def startup_greeting():
     await asyncio.sleep(2.5)
     audio = await asyncio.get_running_loop().run_in_executor(None, _load_startup_sound)
     if audio:
-        print("[greet] startup: playing custom startup sound")
+        log.info("[greet] startup: playing custom startup sound")
         def play():
             try:
                 sd.play(audio[0], audio[1])
                 sd.wait()
             except Exception as e:
-                print(f"startup sound play failed: {e}")
+                log.warning(f"startup sound play failed: {e}")
         async with processing_lock:
             await set_state("speaking")
             await asyncio.get_running_loop().run_in_executor(None, play)
@@ -733,13 +800,13 @@ async def startup_greeting():
         return
     from core.greeter import start_phrase
     phrase = start_phrase()
-    print(f"[greet] startup: {phrase}")
+    log.info(f"[greet] startup: {phrase}")
     async with processing_lock:
         await set_state("speaking")
         try:
             await speaker.speak(phrase)
         except Exception as e:
-            print(f"greeting speech failed: {e}")
+            log.warning(f"greeting speech failed: {e}")
         await set_state("idle")
     update_wake_arm()
 
@@ -759,7 +826,7 @@ async def away_watcher():
         if idle > AWAY_THRESHOLD_SECONDS and not away_flag["active"]:
             away_flag["active"] = True
             away_flag["since"] = datetime.now()
-            print(f"[greet] user went idle ({idle // 60} min)")
+            log.info(f"[greet] user went idle ({idle // 60} min)")
         elif (
             away_flag["active"]
             and idle < 5
@@ -771,7 +838,7 @@ async def away_watcher():
             if away_flag["since"]:
                 minutes = max(1, int((datetime.now() - away_flag["since"]).total_seconds() / 60))
             phrase = welcome_back_phrase(minutes)
-            print(f"[greet] welcome back after {minutes} min: {phrase}")
+            log.info(f"[greet] welcome back after {minutes} min: {phrase}")
             asyncio.create_task(speak_greeting(phrase))
 
 
@@ -781,7 +848,7 @@ async def speak_greeting(phrase):
         try:
             await speaker.speak(phrase)
         except Exception as e:
-            print(f"greeting speech failed: {e}")
+            log.warning(f"greeting speech failed: {e}")
         finally:
             await set_state("idle")
     update_wake_arm()

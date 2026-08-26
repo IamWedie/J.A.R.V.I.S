@@ -8,6 +8,9 @@ import numpy as np
 import sounddevice as sd
 
 import core.config as config
+from core.logging_setup import get_logger
+
+log = get_logger("tts")
 
 SENTENCE_END = re.compile(r"[.!?…](\s|$)")
 
@@ -28,8 +31,7 @@ class Speaker:
         if nch > 1:
             samples = samples.reshape(-1, nch)
         dur = len(samples) / decoded.sample_rate
-        print(f"[tts] voice={config.TTS_VOICE} rate={self.rate or config.TTS_RATE} "
-              f"sr={decoded.sample_rate} audio_dur={dur:.2f}s")
+        log.info("voice=%s rate=%s sr=%s audio_dur=%.2fs", config.TTS_VOICE, self.rate or config.TTS_RATE, decoded.sample_rate, dur)
         return samples, decoded.sample_rate
 
     async def _synthesize(self, sentence, out_q):
@@ -45,7 +47,7 @@ class Speaker:
             if not self._cancelled:
                 await out_q.put(item)
         except Exception as e:
-            print(f"tts synth failed: {e}")
+            log.error("tts synth failed: %s", e)
         finally:
             if tmp_path and os.path.exists(tmp_path):
                 try:

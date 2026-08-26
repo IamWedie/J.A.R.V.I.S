@@ -23,6 +23,19 @@ load_dotenv(ENV_PATH)
 
 ASSISTANT_NAME = "JARVIS"
 
+def _read_version():
+    try:
+        vpath = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "VERSION")
+        with open(vpath, "r", encoding="utf-8") as f:
+            raw = f.read().strip()
+        import re
+        m = re.search(r'"([^"]+)"', raw)
+        return m.group(1) if m else raw
+    except Exception:
+        return "2.1.0"
+
+VERSION = _read_version()
+
 ZEN_API_KEY = os.getenv("ZEN_API_KEY", "").strip()
 ZEN_BASE_URL = "https://opencode.ai/zen/v1"
 DEFAULT_MODEL = os.getenv("ZEN_MODEL", "").strip() or "x-preview-f-free"
@@ -38,6 +51,7 @@ STT_LANG = os.getenv("STT_LANG", "").strip() or None
 MULTILINGUAL = os.getenv("MULTILINGUAL", "").strip().lower() in ("1", "true", "yes")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+PHONE_PIN = os.getenv("PHONE_PIN", "").strip()
 LOCAL_VISION_URL = ""  # disabled until Phase D
 LOCAL_VISION_MODEL = ""  # disabled until Phase D
 

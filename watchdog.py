@@ -10,8 +10,16 @@ from datetime import datetime
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_DIR = os.path.join(PROJECT_DIR, "logs")
 CRASH_LOG = os.path.join(LOG_DIR, "crash.log")
-PYTHON = os.path.join(PROJECT_DIR, "venv", "Scripts", "python.exe")
-APP_PY = os.path.join(PROJECT_DIR, "app.py")
+
+FROZEN = getattr(sys, "frozen", False)
+
+if FROZEN:
+    APP_EXE = sys.executable
+    LAUNCH_CMD = [APP_EXE, "--hidden"]
+else:
+    PYTHON = os.path.join(PROJECT_DIR, "venv", "Scripts", "python.exe")
+    APP_PY = os.path.join(PROJECT_DIR, "app.py")
+    LAUNCH_CMD = [PYTHON, APP_PY]
 
 HOST = "127.0.0.1"
 PORT = 8741
@@ -19,10 +27,9 @@ HEALTH_URL = f"http://{HOST}:{PORT}/"
 
 CHECK_INTERVAL = 30
 MAX_CRASHES = 5
-CRASH_WINDOW = 600  # seconds
+CRASH_WINDOW = 600
 
 _crash_times = []
-_process = None
 
 
 def log(msg):
@@ -62,16 +69,27 @@ def is_server_alive():
 
 def find_jarvis_pid():
     try:
-        out = subprocess.check_output(
-            ["wmic", "process", "where",
-             f"commandline like '%{APP_PY}%' and name='python.exe'",
-             "get", "processid"],
-            text=True, timeout=10
-        )
+        if FROZEN:
+            exe_name = os.path.basename(sys.executable)
+            out = subprocess.check_output(
+                ["wmic", "process", "where",
+                 f"name='{exe_name}'",
+                 "get", "processid"],
+                text=True, timeout=10
+            )
+        else:
+            out = subprocess.check_output(
+                ["wmic", "process", "where",
+                 f"commandline like '%app.py%' and name='python.exe'",
+                 "get", "processid"],
+                text=True, timeout=10
+            )
         for line in out.strip().splitlines():
             line = line.strip()
             if line.isdigit():
-                return int(line)
+                pid = int(line)
+                if pid != os.getpid():
+                    return pid
     except Exception:
         pass
     return None
@@ -90,16 +108,21 @@ def kill_jarvis():
 
 
 def start_jarvis():
-    global _process
     log("Starting JARVIS...")
-    _process = subprocess.Popen(
-        [PYTHON, APP_PY],
-        cwd=PROJECT_DIR,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        creationflags=subprocess.CREATE_NO_WINDOW,
-    )
-    log(f"Started JARVIS PID {_process.pid}")
+    try:
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        p = subprocess.Popen(
+            LAUNCH_CMD,
+            cwd=PROJECT_DIR if not FROZEN else os.path.dirname(sys.executable),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=creationflags,
+        )
+        log(f"Started JARVIS PID {p.pid}")
+        return p
+    except Exception as e:
+        log(f"Start failed: {e}")
+        return None
 
 
 def wait_for_server(timeout=30):
@@ -118,7 +141,7 @@ def crash_restarts_too_many():
 
 
 def main():
-    log("Watchdog started")
+    log(f"Watchdog started (frozen={FROZEN})")
     send_telegram("JARVIS watchdog started")
 
     while True:

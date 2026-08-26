@@ -257,6 +257,8 @@ class _Handler(BaseHTTPRequestHandler):
             sender = data.get("from", "unknown")
             entry = {"from": sender, "message": msg, "ts": time.time()}
             _message_log.append(entry)
+            if len(_message_log) > 200:
+                del _message_log[:len(_message_log) - 100]
             _notify_listeners(entry)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")

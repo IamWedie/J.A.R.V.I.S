@@ -14,6 +14,9 @@ from core.net import agent as phone_agent
 from core.net import netmsg
 from core.tools import pc_tools, web_tools
 from core import scheduler
+from core.logging_setup import get_logger
+
+log = get_logger("brain")
 
 SYSTEM_PROMPT = (
     "You are JARVIS, a witty, precise AI assistant with a voice, living on the user's Windows PC. "
@@ -740,7 +743,7 @@ def _memory_context(user_text, speaker=None):
             return ""
         return "\n\nLOCAL MEMORY (stored on the user's PC):\n" + "\n\n".join(parts)
     except Exception as e:
-        print(f"memory context failed: {e}")
+        log.warning(f"memory context failed: {e}")
         return ""
 
 APPROVAL_REQUIRED = {"type_text", "lock_screen", "sleep_pc"}
@@ -845,7 +848,7 @@ class Brain:
                 last_error = e
                 continue
             if i > 0:
-                print(f"(switched brain to {model})")
+                log.info(f"(switched brain to {model})")
                 self.model = model
             content_parts = []
             tool_acc = {}
@@ -876,7 +879,7 @@ class Brain:
                                     if tc.function.arguments:
                                         acc["args"] += tc.function.arguments
             except Exception as e:
-                print(f"stream interrupted on {model}: {e}")
+                log.warning(f"stream interrupted on {model}: {e}")
                 with contextlib.suppress(Exception):
                     await stream.close()
                 raise
@@ -937,7 +940,7 @@ class Brain:
                     memory.log("user", user_text, user=speaker or "")
                     memory.log("assistant", reply)
                 except Exception as e:
-                    print(f"memory log failed: {e}")
+                    log.warning(f"memory log failed: {e}")
                 if len(self.history) > 40:
                     self.history = self.history[-40:]
                 return reply
@@ -1063,7 +1066,7 @@ async def ask_vision(goal, screenshot_b64, context=""):
                 if content:
                     return content
         except Exception as e:
-            print(f"[vision] local model unavailable ({str(e)[:80]}), trying cloud")
+            log.warning(f"[vision] local model unavailable ({str(e)[:80]}), trying cloud")
 
     client = AsyncOpenAI(
         base_url=config.ZEN_BASE_URL,

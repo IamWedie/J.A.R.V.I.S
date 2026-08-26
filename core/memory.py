@@ -8,6 +8,7 @@ from core.voiceid import data_dir
 
 DB_PATH = os.path.join(data_dir(), "memory.db")
 _lock = threading.Lock()
+_local = threading.local()
 
 
 def _connect():
@@ -16,16 +17,23 @@ def _connect():
     return conn
 
 
+def _get_conn():
+    if not hasattr(_local, "conn") or _local.conn is None:
+        _local.conn = _connect()
+    return _local.conn
+
+
+SCHEMA_VERSION = 2
+
+
 def _init():
     conn = _connect()
-    for table, col in (("facts", "topic"), ("conversations", "user"), ("facts", "user")):
-        try:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
-        except Exception:
-            pass
-    conn.commit()
     conn.executescript(
         """
+        CREATE TABLE IF NOT EXISTS schema_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS conversations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ts TEXT NOT NULL,
@@ -51,7 +59,25 @@ def _init():
         """
     )
     conn.commit()
+    row = conn.execute("SELECT value FROM schema_meta WHERE key='version'").fetchone()
+    current = int(row["value"]) if row else 1
+    if current < SCHEMA_VERSION:
+        _migrate(conn, current, SCHEMA_VERSION)
+        conn.execute(
+            "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('version', ?)",
+            (str(SCHEMA_VERSION),),
+        )
+        conn.commit()
     conn.close()
+
+
+def _migrate(conn, from_ver, to_ver):
+    if from_ver < 2:
+        for table, col in (("facts", "topic"), ("conversations", "user"), ("facts", "user")):
+            try:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+            except Exception:
+                pass
 
 
 _init()
@@ -60,7 +86,7 @@ _init()
 def save_devices(devices):
     now = _now()
     with _lock:
-        conn = _connect()
+        conn = _get_conn()
         for d in devices:
             conn.execute(
                 "INSERT INTO devices (ip, data, last_seen) VALUES (?, ?, ?) "
@@ -68,14 +94,12 @@ def save_devices(devices):
                 (d["ip"], json.dumps(d), now),
             )
         conn.commit()
-        conn.close()
 
 
 def known_devices():
     with _lock:
-        conn = _connect()
+        conn = _get_conn()
         rows = conn.execute("SELECT data, last_seen FROM devices ORDER BY ip").fetchall()
-        conn.close()
     out = []
     for r in rows:
         try:
@@ -96,33 +120,30 @@ def log(role, text, user=""):
     if not text:
         return
     with _lock:
-        conn = _connect()
+        conn = _get_conn()
         conn.execute(
             "INSERT INTO conversations (ts, role, text, user) VALUES (?, ?, ?, ?)",
             (_now(), role, text, str(user or "")),
         )
         conn.commit()
-        conn.close()
 
 
 def recent_conversations(limit=14):
     with _lock:
-        conn = _connect()
+        conn = _get_conn()
         rows = conn.execute(
             "SELECT ts, role, text, user FROM conversations ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
-        conn.close()
     return [{"ts": r["ts"], "role": r["role"], "text": r["text"], "user": r["user"] or ""} for r in reversed(rows)]
 
 
 def search_conversations(query, limit=6):
     with _lock:
-        conn = _connect()
+        conn = _get_conn()
         rows = conn.execute(
             "SELECT ts, role, text FROM conversations WHERE text LIKE ? ORDER BY id DESC LIMIT ?",
             (f"%{query}%", limit),
         ).fetchall()
-        conn.close()
     return [{"ts": r["ts"], "role": r["role"], "text": r["text"]} for r in rows]
 
 
@@ -131,7 +152,7 @@ def add_fact(fact, user=""):
     if not fact:
         return False
     with _lock:
-        conn = _connect()
+        conn = _get_conn()
         try:
             conn.execute(
                 "INSERT INTO facts (ts, topic, fact, user) VALUES (?, '', ?, ?)",
@@ -139,9 +160,7 @@ def add_fact(fact, user=""):
             )
             conn.commit()
         except sqlite3.IntegrityError:
-            conn.close()
             return False
-        conn.close()
     return True
 
 
@@ -152,7 +171,7 @@ def upsert_fact(topic, fact, user=""):
     if not fact:
         return False
     with _lock:
-        conn = _connect()
+        conn = _get_conn()
         existing = conn.execute(
             "SELECT id FROM facts WHERE topic = ? AND user = ?", (topic, user)
         ).fetchone()
@@ -168,40 +187,35 @@ def upsert_fact(topic, fact, user=""):
                     (_now(), topic, fact, user),
                 )
             except sqlite3.IntegrityError:
-                conn.close()
                 return False
         conn.commit()
-        conn.close()
     return True
 
 
 def find_facts_by_topic(topic, user=""):
     topic = str(topic).strip().lower()
     with _lock:
-        conn = _connect()
+        conn = _get_conn()
         rows = conn.execute(
             "SELECT fact FROM facts WHERE topic = ? AND user = ? ORDER BY id DESC",
             (topic, str(user or "")),
         ).fetchall()
-        conn.close()
     return [r["fact"] for r in rows]
 
 
 def remove_fact(substring):
     with _lock:
-        conn = _connect()
+        conn = _get_conn()
         cur = conn.execute("DELETE FROM facts WHERE fact LIKE ?", (f"%{substring}%",))
         conn.commit()
         n = cur.rowcount
-        conn.close()
     return n
 
 
 def list_facts():
     with _lock:
-        conn = _connect()
+        conn = _get_conn()
         rows = conn.execute("SELECT fact FROM facts ORDER BY id DESC").fetchall()
-        conn.close()
     return [r["fact"] for r in rows]
 
 
@@ -232,27 +246,25 @@ def relevant_facts(user_text, limit=8, user=None):
 
 def list_facts_with_users():
     with _lock:
-        conn = _connect()
+        conn = _get_conn()
         rows = conn.execute("SELECT fact, user FROM facts ORDER BY id DESC").fetchall()
-        conn.close()
     return [{"fact": r["fact"], "user": r["user"] or ""} for r in rows]
 
 
 def wipe_memory():
     with _lock:
-        conn = _connect()
+        conn = _get_conn()
         conn.execute("DELETE FROM conversations")
         conn.execute("DELETE FROM facts")
+        conn.execute("VACUUM")
         conn.commit()
-        conn.close()
 
 
 def stats():
     with _lock:
-        conn = _connect()
+        conn = _get_conn()
         c = conn.execute("SELECT COUNT(*) AS n FROM conversations").fetchone()["n"]
         f = conn.execute("SELECT COUNT(*) AS n FROM facts").fetchone()["n"]
-        conn.close()
     return {"conversations": c, "facts": f}
 
 

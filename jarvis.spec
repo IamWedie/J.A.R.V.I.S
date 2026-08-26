@@ -19,11 +19,15 @@ hiddenimports = [
     "comtypes.stream",
 ]
 
+import os
+
 datas = [
     ("ui", "ui"),
     ("jarvis.ico", "."),
     ("TERMS.md", "."),
+    ("CHANGELOG.md", "."),
     ("models", "models"),
+    ("VERSION", "."),
 ]
 datas += collect_data_files("openwakeword")
 datas += collect_data_files("faster_whisper")
@@ -32,6 +36,9 @@ datas += [
     for src, dst in [
     ]
 ]
+
+if os.path.isdir("platform-tools"):
+    datas.append(("platform-tools", "platform-tools"))
 
 binaries = []
 binaries += collect_dynamic_libs("ctranslate2")

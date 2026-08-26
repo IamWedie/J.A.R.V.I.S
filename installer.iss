@@ -1,7 +1,8 @@
 #define MyAppName "JARVIS"
-#define MyAppVersion "2.0"
 #define MyAppPublisher "Wadia"
 #define MyAppExeName "JARVIS.exe"
+
+#include "VERSION"
 
 [Setup]
 AppId={{7E1F2A44-9C3B-4B8D-8A57-1A2B3C4D5E6F}
@@ -26,6 +27,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: checkedonc
 
 [Files]
 Source: "dist\JARVIS\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "platform-tools\*"; DestDir: "{app}\platform-tools"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 [Icons]
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\jarvis.ico"; Tasks: desktopicon
@@ -67,8 +69,11 @@ begin
       ForceDirectories(DataDir);
       SaveStringToFile(DataDir + '\config.env',
         'ZEN_API_KEY=' + Key + #13#10 +
-        'ZEN_MODEL=mimo-v2.5-free' + #13#10 +
-        'WAKE_ENABLED=1' + #13#10,
+        'WAKE_ENABLED=1' + #13#10 +
+        'STT_MODEL=tiny' + #13#10 +
+        'STT_LANG=auto' + #13#10 +
+        'TTS_VOICE=ar-TN-HediNeural' + #13#10 +
+        'TTS_RATE=+0%' + #13#10,
         False);
     end;
   end;

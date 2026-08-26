@@ -4,6 +4,10 @@ import time
 import numpy as np
 import sounddevice as sd
 
+from core.logging_setup import get_logger
+
+log = get_logger("mic")
+
 SAMPLE_RATE = 16000
 OWW_CHUNK_BYTES = 12800
 

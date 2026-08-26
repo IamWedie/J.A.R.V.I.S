@@ -423,7 +423,9 @@ def selfie_verify():
         screen_on()
         time.sleep(1)
     if is_locked():
-        unlock_with_pin("0910")
+        import core.config as cfg
+        pin = getattr(cfg, "PHONE_PIN", "") or "0910"
+        unlock_with_pin(pin)
         time.sleep(2)
     if is_in_use():
         return None, "Phone in use, try again later."

@@ -5,6 +5,10 @@ import wave
 
 import numpy as np
 
+from core.logging_setup import get_logger
+
+log = get_logger("voiceid")
+
 SAMPLE_RATE = 16000
 MODEL_NAME = "redimnet-b2"
 
@@ -130,10 +134,10 @@ class VoiceID:
             models_dir = config.models_dir()
             local = os.path.join(models_dir, "redimnet_b2_vox2.onnx") if models_dir else ""
             if local and os.path.isfile(local):
-                print(f"[voiceid] using bundled model: {local}")
+                log.info("using bundled model: %s", local)
                 self.embedder = SpeakerEmbedder(model=local)
             else:
-                print(f"[voiceid] using downloaded model: {MODEL_NAME}")
+                log.info("using downloaded model: %s", MODEL_NAME)
                 self.embedder = SpeakerEmbedder(model=MODEL_NAME)
         return self.embedder
 
@@ -160,7 +164,7 @@ class VoiceID:
         try:
             np.save(path, mean_emb)
         except Exception as e:
-            print(f"failed saving voice print: {e}")
+            log.error("failed saving voice print: %s", e)
             return False
         with self._lock:
             self.profiles[os.path.splitext(os.path.basename(path))[0]] = mean_emb
@@ -180,7 +184,7 @@ class VoiceID:
         with self._lock:
             self.last_similarity = round(sim, 3)
             self.last_identity = name if sim >= self.threshold else self.last_identity
-        print(f"voice similarity: {sim:.3f} vs '{name}' (threshold {self.threshold})")
+        log.debug("voice similarity: %.3f vs '%s' (threshold %s)", sim, name, self.threshold)
         return sim >= self.threshold
 
     def identify(self, wav):
