@@ -1027,7 +1027,7 @@ async def ask_vision(goal, screenshot_b64, context=""):
         "- Only output ONE action\n"
         "- Be precise with coordinates for 1080x2412 screen\n"
         "- Shutter button is at ~(540, 2200)\n"
-        "- Camera switch button is at ~(150, 950) (left edge, upper-middle)\n"
+        "- Camera switch button is at ~(950, 2100) (right side, near shutter)\n"
         "- Flash is controlled by broadcast, never tap for flash\n"
         "- Status bar is ~0-100px from top\n"
         "- Navigation bar is ~2300-2412px from top\n"

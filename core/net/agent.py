@@ -18,7 +18,7 @@ KNOWN_LAYOUTS = {
     "camera": {
         "shutter": (540, 2200),
         "flash": (150, 150),
-        "switch": (950, 150),
+        "switch": (950, 2100),
         "video_mode": (540, 2100),
         "gallery": (150, 2200),
     },

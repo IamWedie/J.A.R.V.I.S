@@ -393,7 +393,7 @@ def take_photo():
 def take_selfie():
     time.sleep(0.5)
     if get_camera_facing() != "front":
-        _shell("input tap 150 950")
+        _shell("input tap 950 2100")
         time.sleep(1.0)
     _shell("input tap 540 2200")
     time.sleep(1.0)
@@ -447,7 +447,7 @@ def selfie_verify():
 
 def switch_camera():
     global _camera_facing
-    _shell("input tap 150 950")
+    _shell("input tap 950 2100")
     time.sleep(1.0)
     _camera_facing = "front" if _camera_facing == "back" else "back"
     return f"Camera switched to {_camera_facing}."
