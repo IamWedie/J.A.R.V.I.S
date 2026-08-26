@@ -287,7 +287,12 @@ function onMessage(ev) {
             break;
         case 'update_available':
             showToast(`Update available: v${msg.latest} (you have v${msg.current})`, 'info', 10000);
-            addMsg(`A new version (v${msg.latest}) is available at ${msg.url}`, 'jarvis');
+            addMsg(`A new version (v${msg.latest}) is available. Click the update button in settings to download.`, 'jarvis');
+            break;
+        case 'update_progress':
+            if (msg.status === 'checking') showToast('Checking for updates...', 'info', 3000);
+            else if (msg.status === 'downloading') showToast('Downloading update...', 'info', 10000);
+            else if (msg.status === 'ready') showToast('Update ready — restarting...', 'success');
             break;
     }
 }
@@ -419,11 +424,32 @@ document.getElementById('testVoiceBtn').addEventListener('click', () => {
     showToast('Testing voice...', 'info', 2000);
 });
 
+/* === UPDATE === */
+document.getElementById('updateBtn').addEventListener('click', () => {
+    send({ cmd: 'update_download' });
+});
+async function loadVersion() {
+    try {
+        const r = await fetch('/api/health');
+        const d = await r.json();
+        document.getElementById('versionLabel').textContent = 'v' + (d.version || '?');
+        if (d.language) document.getElementById('langSelect').value = d.language;
+    } catch {}
+}
+
+/* === LANGUAGE === */
+const langSelect = document.getElementById('langSelect');
+langSelect.addEventListener('change', () => {
+    send({ cmd: 'set_language', lang: langSelect.value });
+    location.reload();
+});
+
 /* === INIT === */
 connect();
 loadModels();
 maybeRunSetup();
 loadMemoryStats();
+loadVersion();
 
 /* === HEALTH CHECK === */
 const offlineBanner = document.getElementById('offlineBanner');

@@ -5,11 +5,13 @@ import time
 import subprocess
 import urllib.request
 import json
+import traceback
 from datetime import datetime
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_DIR = os.path.join(PROJECT_DIR, "logs")
 CRASH_LOG = os.path.join(LOG_DIR, "crash.log")
+CRASH_DUMPS_DIR = os.path.join(LOG_DIR, "dumps")
 
 FROZEN = getattr(sys, "frozen", False)
 
@@ -140,6 +142,45 @@ def crash_restarts_too_many():
     return len(_crash_times) >= MAX_CRASHES
 
 
+def collect_crash_dump():
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    os.makedirs(CRASH_DUMPS_DIR, exist_ok=True)
+    dump_path = os.path.join(CRASH_DUMPS_DIR, f"crash_{ts}.txt")
+    lines = [f"=== JARVIS Crash Dump {ts} ===\n"]
+    pid = find_jarvis_pid()
+    if pid:
+        try:
+            out = subprocess.check_output(
+                ["wmic", "process", "where", f"processid={pid}",
+                 "get", "Name,CommandLine,WorkingSetSize,KernelModeTime,UserModeTime"],
+                text=True, timeout=10
+            )
+            lines.append(f"Process info:\n{out}\n")
+        except Exception:
+            lines.append("Could not get process info\n")
+    jarvis_log = os.path.join(LOG_DIR, "jarvis.log")
+    if os.path.exists(jarvis_log):
+        try:
+            with open(jarvis_log, "r", encoding="utf-8", errors="replace") as f:
+                all_lines = f.readlines()
+                lines.append(f"\nLast 50 log entries:\n")
+                lines.extend(all_lines[-50:])
+        except Exception:
+            lines.append("Could not read jarvis.log\n")
+    try:
+        import psutil
+        proc = psutil.Process(pid) if pid else psutil.Process()
+        mem = proc.memory_info()
+        lines.append(f"\nMemory: RSS={mem.rss // 1024}KB, VMS={mem.vms // 1024}KB\n")
+        lines.append(f"CPU: {proc.cpu_percent(interval=1)}%\n")
+    except Exception:
+        pass
+    with open(dump_path, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+    log(f"Crash dump saved: {dump_path}")
+    return dump_path
+
+
 def main():
     log(f"Watchdog started (frozen={FROZEN})")
     send_telegram("JARVIS watchdog started")
@@ -151,6 +192,7 @@ def main():
             continue
 
         log("Server NOT responding!")
+        collect_crash_dump()
 
         if crash_restarts_too_many():
             msg = f"JARVIS crashed {MAX_CRASHES} times in {CRASH_WINDOW}s — watchdog stopping"

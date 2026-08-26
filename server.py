@@ -225,7 +225,14 @@ async def api_health():
         online = True
     except Exception:
         pass
-    return {"online": online, "version": config.VERSION}
+    from core.i18n import get_language
+    return {"online": online, "version": config.VERSION, "language": get_language()}
+
+
+@app.get("/api/language")
+async def api_language():
+    from core.i18n import get_available_languages, get_language
+    return {"current": get_language(), "available": get_available_languages()}
 
 
 @app.get("/api/system_check")
@@ -602,6 +609,37 @@ async def websocket_endpoint(ws: WebSocket):
                     await send_event({"type": "memory_wiped"})
                 except Exception as e:
                     await send_event({"type": "error", "message": f"Wipe failed: {e}"})
+            elif cmd == "update_download":
+                async def _do_update():
+                    from core.updater import check_for_update, download_update, apply_zip_update
+                    await send_event({"type": "update_progress", "status": "checking"})
+                    info = await asyncio.to_thread(check_for_update)
+                    if not info:
+                        await send_event({"type": "error", "message": "No update available"})
+                        return
+                    await send_event({"type": "update_progress", "status": "downloading"})
+                    path = await asyncio.to_thread(download_update, info)
+                    if not path:
+                        await send_event({"type": "error", "message": "Download failed"})
+                        return
+                    if info.get("download_url", "").endswith(".zip"):
+                        ok = await asyncio.to_thread(apply_zip_update, info)
+                    else:
+                        from core.updater import install_update
+                        ok = await asyncio.to_thread(install_update, path)
+                    if ok:
+                        await send_event({"type": "update_progress", "status": "ready"})
+                        speaker.stop()
+                        await speaker.speak("Update downloaded. JARVIS will restart to apply it.")
+                    else:
+                        await send_event({"type": "error", "message": "Install failed"})
+                asyncio.create_task(_do_update())
+            elif cmd == "set_language":
+                lang = msg.get("lang", "en")
+                from core.i18n import set_language
+                set_language(lang)
+                config.save_settings({"UI_LANG": lang})
+                await send_event({"type": "language_changed", "lang": lang})
     except WebSocketDisconnect:
         pass
     finally:
@@ -702,22 +740,18 @@ async def test_voice():
 async def _check_for_updates():
     await asyncio.sleep(10)
     try:
-        import urllib.request
-        req = urllib.request.Request(
-            "https://api.github.com/repos/IamWedie/J.A.R.V.I.S/releases/latest",
-            headers={"Accept": "application/vnd.github.v3+json"},
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read())
-            latest = data.get("tag_name", "").lstrip("v")
-            if latest and latest != config.VERSION:
-                log.info("Update available: %s (current: %s)", latest, config.VERSION)
-                await send_event({
-                    "type": "update_available",
-                    "current": config.VERSION,
-                    "latest": latest,
-                    "url": data.get("html_url", ""),
-                })
+        from core.updater import check_for_update
+        info = await asyncio.to_thread(check_for_update)
+        if info:
+            log.info("Update available: %s (current: %s)", info["latest"], config.VERSION)
+            await send_event({
+                "type": "update_available",
+                "current": info["current"],
+                "latest": info["latest"],
+                "url": info["url"],
+                "download_url": info.get("download_url", ""),
+                "size": info.get("size", 0),
+            })
     except Exception:
         pass
 

@@ -107,6 +107,13 @@ if __name__ == "__main__":
         sys.exit(0)
 
     set_app_user_model_id()
+
+    if "--encrypt-env" in sys.argv:
+        from core.vault import encrypt_env_file
+        encrypt_env_file(config.ENV_PATH)
+        print("Secrets encrypted. .env.vault created.")
+        sys.exit(0)
+
     start_hidden = "--hidden" in sys.argv
     check_ok = bool(config.ZEN_API_KEY)
 

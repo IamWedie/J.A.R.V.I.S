@@ -2,6 +2,7 @@
 .env
 config.env
 *.env.backup
+# NOTE: .env.vault is the encrypted version — safe to commit
 
 # Python
 __pycache__/

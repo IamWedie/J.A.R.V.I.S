@@ -332,6 +332,16 @@ body {
     color: #ffb3b3;
     background: rgba(130, 30, 30, .25);
 }
+#settingsPanel button.update {
+    border-color: rgba(80, 200, 120, .45);
+    color: #aaffdd;
+    background: rgba(30, 100, 60, .3);
+}
+.settingsDivider {
+    height: 1px;
+    background: rgba(50, 110, 160, .3);
+    margin: 10px 0;
+}
 #settingsPanel .hint {
     font-size: 10.5px;
     color: #5f8aa8;
