@@ -128,8 +128,8 @@ models/                 bundled whisper models (gitignored)
 - [x] Auto-learning: pattern-based fact extraction, topic upserts, corrections overwrite
 - [x] Per-user voice ID: multi-profile identify(), attributed memories/facts, legacy migration
 - [x] Telegram bot brain: long-polling, owner-lock, telegram_notify tool, reminder relay
-- [ ] Local vision: Moondream2 downloaded + server runs, but Q8_0 quality too low for reliable use
-- [ ] UI automation depth (per-app volume, WiFi/dark mode toggles)
+- [ ] Local vision: deferred to Phase D (moondream2 downloaded, config disabled)
+- [x] UI automation depth (launch_app, close_app, volume, media, focus, screenshot, OCR)
 
 ### Phase D — Polish
 - [ ] Morning briefing (weather/calendar/news)

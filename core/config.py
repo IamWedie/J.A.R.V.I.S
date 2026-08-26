@@ -38,8 +38,8 @@ STT_LANG = os.getenv("STT_LANG", "").strip() or None
 MULTILINGUAL = os.getenv("MULTILINGUAL", "").strip().lower() in ("1", "true", "yes")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
-LOCAL_VISION_URL = os.getenv("LOCAL_VISION_URL", "").strip() or "http://127.0.0.1:8755"
-LOCAL_VISION_MODEL = os.getenv("LOCAL_VISION_MODEL", "").strip() or "moondream2"
+LOCAL_VISION_URL = ""  # disabled until Phase D
+LOCAL_VISION_MODEL = ""  # disabled until Phase D
 
 
 def resolve_path(p):
