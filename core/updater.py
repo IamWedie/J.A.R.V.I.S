@@ -53,6 +53,11 @@ def check_for_update():
                 "size": exe_asset.get("size", 0) if exe_asset else 0,
                 "body": data.get("body", ""),
             }
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        log.warning("update check failed: %s", e)
+        return None
     except Exception as e:
         log.warning("update check failed: %s", e)
         return None

@@ -1130,6 +1130,7 @@ class Brain:
         desc = APPROVAL_DESCRIPTIONS.get(name, lambda a: name)(args)
         req = approval_mod.create_request(name, desc, source)
         self.approval_future = req.future
+        log.info("APPROVAL: created for %s [%s], future=%s", name, source, id(req.future))
 
         if source == "voice":
             await self._voice_approval_flow(name, desc, req)
@@ -1149,12 +1150,15 @@ class Brain:
                 "description": desc,
                 "source": "ui",
             })
+        log.info("APPROVAL: sent approval_request to UI for %s, waiting...", name)
 
         timeout = 12 if source == "voice" else 120
         try:
             result = await asyncio.wait_for(req.future, timeout=timeout)
+            log.info("APPROVAL: resolved %s = %s", name, result)
             return result
         except asyncio.TimeoutError:
+            log.warning("APPROVAL: timed out for %s", name)
             req.resolve(False)
             return False
         finally:
@@ -1207,8 +1211,14 @@ class Brain:
         req.resolve(False)
 
     def resolve_approval(self, approved):
+        log.info("APPROVAL: resolve_approval called with approved=%s, future=%s", approved, id(self.approval_future) if self.approval_future else None)
         if self.approval_future and not self.approval_future.done():
             self.approval_future.set_result(bool(approved))
+            log.info("APPROVAL: future resolved successfully")
+        elif self.approval_future and self.approval_future.done():
+            log.warning("APPROVAL: future already done!")
+        else:
+            log.warning("APPROVAL: no pending future to resolve!")
         self.approval_future = None
 
 

@@ -563,6 +563,7 @@ async def websocket_endpoint(ws: WebSocket):
                 if text:
                     asyncio.create_task(text_flow(text))
             elif cmd == "approval":
+                log.info("WS: approval command received: %s", msg.get("approved"))
                 brain.resolve_approval(bool(msg.get("approved")))
             elif cmd == "model":
                 brain.model = msg.get("model") or brain.model
