@@ -578,6 +578,11 @@ TOOLS = [
         "description": "Put the PC to sleep. Requires user approval in the UI.",
         "parameters": {"type": "object", "properties": {}},
     }},
+    {"type": "function", "function": {
+        "name": "morning_briefing",
+        "description": "Give a morning briefing: weather, Tunisia news, reminders. Say 'give me the briefing' or 'what's the news'.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
 ]
 
 TOOL_FUNCTIONS = {
@@ -670,6 +675,7 @@ TOOL_FUNCTIONS = {
     "net_read_messages": lambda: netmsg.get_messages(),
     "lock_screen": pc_tools.lock_screen,
     "sleep_pc": pc_tools.sleep_pc,
+    "morning_briefing": lambda: __import__("core.briefing", fromlist=["build_briefing"]).build_briefing(),
 }
 
 
