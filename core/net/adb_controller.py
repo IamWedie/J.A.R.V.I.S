@@ -7,6 +7,7 @@ import time
 
 ADB = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                    "platform-tools", "adb.exe")
+_camera_facing = "back"
 
 
 def _run(args, timeout=15):
@@ -370,6 +371,8 @@ def _resolve_launch_intent(package):
 # ──────────────────── CAMERA ────────────────────
 
 def open_camera():
+    global _camera_facing
+    _camera_facing = "back"
     comp = _resolve_launch_intent("com.hihonor.camera")
     if comp:
         _shell_raw(f"am start -n {comp}")
@@ -389,8 +392,9 @@ def take_photo():
 
 def take_selfie():
     time.sleep(0.5)
-    _shell("input tap 950 150")
-    time.sleep(1.0)
+    if get_camera_facing() != "front":
+        _shell("input tap 150 950")
+        time.sleep(1.0)
     _shell("input tap 540 2200")
     time.sleep(1.0)
     return "Selfie taken."
@@ -412,21 +416,45 @@ def flash_off():
     return "Flash off."
 
 
+def selfie_verify():
+    if not _is_connected():
+        return None, "Phone not connected."
+    if not is_screen_on():
+        screen_on()
+        time.sleep(1)
+    if is_locked():
+        unlock_with_pin("0910")
+        time.sleep(2)
+    if is_in_use():
+        return None, "Phone in use, try again later."
+    open_camera()
+    time.sleep(2)
+    if get_camera_facing() != "front":
+        switch_camera()
+        time.sleep(1)
+    take_selfie()
+    time.sleep(2)
+    out = _shell_raw("ls -t /sdcard/DCIM/Camera/")
+    photos = [f for f in out.splitlines() if f.strip().endswith((".jpg", ".jpeg", ".png"))]
+    if not photos:
+        return None, "No photo found after selfie."
+    phone_path = f"/sdcard/DCIM/Camera/{photos[0]}"
+    local = pull_file(phone_path)
+    if os.path.exists(local) and os.path.getsize(local) > 1000:
+        return local, "Selfie captured."
+    return None, "Failed to pull selfie."
+
+
 def switch_camera():
+    global _camera_facing
     _shell("input tap 150 950")
     time.sleep(1.0)
-    return "Camera switched."
+    _camera_facing = "front" if _camera_facing == "back" else "back"
+    return f"Camera switched to {_camera_facing}."
 
 
 def get_camera_facing():
-    out = _shell_raw("dumpsys media.camera")
-    for line in out.splitlines():
-        if "CONNECT device" in line and "honor.camera" in line:
-            if "device 1" in line:
-                return "front"
-            elif "device 0" in line:
-                return "back"
-    return "unknown"
+    return _camera_facing
 
 
 def is_locked():
