@@ -1009,6 +1009,52 @@ FALLBACK_MODELS = ["laguna-s-2.1-free", "big-pickle", "nemotron-3.5-lightning-fr
 
 async def ask_vision(goal, screenshot_b64, context=""):
     from openai import AsyncOpenAI
+
+    system_prompt = (
+        "You are an Android phone agent controlling an Honor LLY-LX2 (1080x2412). "
+        "You see a screenshot of the phone screen. The user wants you to accomplish a goal. "
+        "Respond with EXACTLY ONE action in this format:\n\n"
+        "ACTION: <action_name> <args>\nREASON: <brief reason>\n\n"
+        "Available actions:\n"
+        "- tap <x> <y> — tap at screen coordinates\n"
+        "- swipe <x1> <y1> <x2> <y2> — swipe gesture\n"
+        "- type <text> — type text into focused field\n"
+        "- press_home — go to home screen\n"
+        "- press_back — go back\n"
+        "- done <message> — task is complete, include what happened\n"
+        "- fail <reason> — cannot complete\n\n"
+        "RULES:\n"
+        "- Only output ONE action\n"
+        "- Be precise with coordinates for 1080x2412 screen\n"
+        "- Shutter button is at ~(540, 2200)\n"
+        "- Camera switch button is at ~(150, 950) (left edge, upper-middle)\n"
+        "- Flash is controlled by broadcast, never tap for flash\n"
+        "- Status bar is ~0-100px from top\n"
+        "- Navigation bar is ~2300-2412px from top\n"
+        "- Common keyboard OK/Enter is at ~(900, 2100)\n"
+    )
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": [
+            {"type": "text", "text": f"Goal: {goal}\n{context}"},
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{screenshot_b64}"}},
+        ]},
+    ]
+
+    local_url = getattr(config, "LOCAL_VISION_URL", "")
+    if local_url:
+        try:
+            local = AsyncOpenAI(base_url=local_url, api_key="local", timeout=90)
+            r = await asyncio.wait_for(local.chat.completions.create(
+                model=getattr(config, "LOCAL_VISION_MODEL", "moondream2"),
+                messages=messages, max_tokens=250,
+            ), timeout=90)
+            content = (r.choices[0].message.content or "").strip()
+            if content:
+                return content
+        except Exception as e:
+            print(f"[vision] local model unavailable ({str(e)[:80]}), trying cloud")
+
     client = AsyncOpenAI(
         base_url=config.ZEN_BASE_URL,
         api_key=config.ZEN_API_KEY,
@@ -1016,35 +1062,6 @@ async def ask_vision(goal, screenshot_b64, context=""):
     )
     model = config.DEFAULT_MODEL or "mimo-v2.5-free"
     models = [model] + [m for m in FALLBACK_MODELS if m != model]
-    messages = [
-        {"role": "system", "content": (
-            "You are an Android phone agent controlling an Honor LLY-LX2 (1080x2412). "
-            "You see a screenshot of the phone screen. The user wants you to accomplish a goal. "
-            "Respond with EXACTLY ONE action in this format:\n\n"
-            "ACTION: <action_name> <args>\nREASON: <brief reason>\n\n"
-            "Available actions:\n"
-            "- tap <x> <y> — tap at screen coordinates\n"
-            "- swipe <x1> <y1> <x2> <y2> — swipe gesture\n"
-            "- type <text> — type text into focused field\n"
-            "- press_home — go to home screen\n"
-            "- press_back — go back\n"
-            "- done <message> — task is complete, include what happened\n"
-            "- fail <reason> — cannot complete\n\n"
-            "RULES:\n"
-            "- Only output ONE action\n"
-            "- Be precise with coordinates for 1080x2412 screen\n"
-            "- Shutter button is at ~(540, 2200)\n"
-            "- Flash toggle is at ~(150, 150)\n"
-            "- Camera switch is at ~(950, 150)\n"
-            "- Status bar is ~0-100px from top\n"
-            "- Navigation bar is ~2300-2412px from top\n"
-            "- Common keyboard OK/Enter is at ~(900, 2100)\n"
-        )},
-        {"role": "user", "content": [
-            {"type": "text", "text": f"Goal: {goal}\n{context}"},
-            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{screenshot_b64}"}},
-        ]},
-    ]
     for m in models:
         try:
             resp = await client.chat.completions.create(model=m, messages=messages, max_tokens=200)
@@ -1052,3 +1069,4 @@ async def ask_vision(goal, screenshot_b64, context=""):
         except Exception:
             continue
     return "fail: all vision models unavailable"
+

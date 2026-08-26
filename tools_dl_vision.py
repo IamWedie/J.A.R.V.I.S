@@ -13,7 +13,7 @@ LOG = os.path.join(OUT, "download.log")
 FILES = [
     ("https://github.com/ggml-org/llama.cpp/releases/download/b10635/llama-b10635-bin-win-cuda-12.4-x64.zip", 250_468_618),
     ("https://github.com/ggml-org/llama.cpp/releases/download/b10635/cudart-llama-bin-win-cuda-12.4-x64.zip", 391_443_627),
-    ("https://huggingface.co/ggml-org/moondream2-20250414-GGUF/resolve/main/moondream2-text-model-f16.gguf", 2_839_535_072),
+    ("https://huggingface.co/ggml-org/moondream2-20250414-GGUF/resolve/main/moondream2-text-model-f16_ct-vicuna.gguf", 2_839_535_072),
     ("https://huggingface.co/ggml-org/moondream2-20250414-GGUF/resolve/main/moondream2-mmproj-f16-20250414.gguf", 909_777_984),
 ]
 
@@ -74,6 +74,10 @@ def fetch_range(url, start, want, path, retries=8):
 
 def download(url, size):
     name = url.split("/")[-1].split("?")[0]
+    final = os.path.join(OUT, name)
+    if os.path.exists(final) and os.path.getsize(final) == size:
+        log(f"{name}: already complete ({size/1e9:.2f} GB)")
+        return True
     part_dir = os.path.join(OUT, f"_parts_{name}")
     os.makedirs(part_dir, exist_ok=True)
     n_chunks = (size + CHUNK - 1) // CHUNK

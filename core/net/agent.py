@@ -59,7 +59,7 @@ def _take_screenshot_b64():
 async def _try_vision(goal, b64, context=""):
     try:
         from core.brain import ask_vision
-        resp = await asyncio.wait_for(ask_vision(goal, b64, context), timeout=15)
+        resp = await asyncio.wait_for(ask_vision(goal, b64, context), timeout=100)
         if resp and not resp.startswith("fail"):
             return resp
     except Exception:
