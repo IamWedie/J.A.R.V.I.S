@@ -265,7 +265,7 @@ async def api_memory_stats():
     return memory.stats()
 
 
-async def think_and_speak(user_text, speaker_name=None):
+async def think_and_speak(user_text, speaker_name=None, source="ui"):
     global _barge_in_text
     await set_state("thinking")
     if barge_in_enabled:
@@ -285,7 +285,7 @@ async def think_and_speak(user_text, speaker_name=None):
             asyncio.create_task(set_state("speaking"))
 
     try:
-        reply = await brain.ask(user_text, on_chunk=on_chunk, speaker=speaker_name)
+        reply = await brain.ask(user_text, on_chunk=on_chunk, speaker=speaker_name, source="voice")
     except Exception as e:
         await send_event({"type": "error", "message": str(e)})
         reply = "Sorry sir, something went wrong."
@@ -380,7 +380,7 @@ async def voice_pipeline(play_intro):
             return
 
         await send_event({"type": "user_said", "text": user_text})
-        await think_and_speak(user_text, speaker_name=speaker_name)
+        await think_and_speak(user_text, speaker_name=speaker_name, source="voice")
         asyncio.create_task(follow_up_window())
     update_wake_arm()
 

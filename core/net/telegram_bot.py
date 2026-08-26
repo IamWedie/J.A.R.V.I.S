@@ -93,11 +93,30 @@ def _handle_update(update):
     if not text:
         return
 
+    if text.startswith("/pin"):
+        from core import approval as approval_mod
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2:
+            _send(chat_id, "Usage: /pin <PIN_CODE>")
+            return
+        pin = parts[1].strip()
+        approved, desc = approval_mod.resolve_by_pin(pin)
+        if approved:
+            _send(chat_id, f"Approved: {desc}")
+        else:
+            pending = approval_mod.get_pending()
+            if pending:
+                tool_name = list(pending.keys())[0]
+                _send(chat_id, f"Wrong PIN. Still waiting for approval: {tool_name}")
+            else:
+                _send(chat_id, "Wrong PIN or no pending approval.")
+        return
+
     import asyncio
     brain = _get_brain()
     t0 = time.time()
     try:
-        reply = asyncio.run(brain.ask(f"[via Telegram from {sender}] {text}"))
+        reply = asyncio.run(brain.ask(f"[via Telegram from {sender}] {text}", source="telegram"))
     except Exception as e:
         reply = f"Brain error: {e}"
     print(f"[tg] {sender}: {text[:60]} -> ({time.time()-t0:.1f}s)")

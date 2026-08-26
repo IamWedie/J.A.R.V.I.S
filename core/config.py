@@ -61,6 +61,7 @@ MULTILINGUAL = os.getenv("MULTILINGUAL", "").strip().lower() in ("1", "true", "y
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 PHONE_PIN = os.getenv("PHONE_PIN", "").strip()
+JARVIS_PIN = os.getenv("JARVIS_PIN", "").strip()
 LOCAL_VISION_URL = ""  # disabled until Phase D
 LOCAL_VISION_MODEL = ""  # disabled until Phase D
 

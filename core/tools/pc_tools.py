@@ -387,3 +387,312 @@ def lock_screen():
 def sleep_pc():
     subprocess.Popen(["rundll32.exe", "powrprof.dll,SetSuspendState 0,1,0"])
     return "Putting the PC to sleep."
+
+
+def wifi_status():
+    try:
+        result = subprocess.run(
+            ["netsh", "wlan", "show", "interfaces"],
+            capture_output=True, text=True, timeout=10
+        )
+        out = result.stdout + result.stderr
+        ssid = signal = ipv4 = state = ""
+        for line in out.splitlines():
+            line = line.strip()
+            if line.startswith("SSID") and not line.startswith("BSS"):
+                ssid = line.split(":", 1)[-1].strip()
+            elif "Signal" in line:
+                signal = line.split(":", 1)[-1].strip()
+            elif line.startswith("IPv4"):
+                ipv4 = line.split(":", 1)[-1].strip()
+            elif line.startswith("State"):
+                state = line.split(":", 1)[-1].strip()
+        if not ssid and not state:
+            if "elevation" in out.lower() or "administrator" in out.lower():
+                return "WiFi status requires admin privileges. Run JARVIS as admin."
+            if "not found" in out.lower() or "no wireless" in out.lower():
+                return "No WiFi adapter found on this system."
+            return "WiFi is off or no adapter found."
+        parts = [f"State: {state}"]
+        if ssid:
+            parts.append(f"SSID: {ssid}")
+        if signal:
+            parts.append(f"Signal: {signal}")
+        if ipv4:
+            parts.append(f"IP: {ipv4}")
+        return "\n".join(parts)
+    except Exception as e:
+        return f"WiFi status failed: {e}"
+
+
+def wifi_toggle(state="toggle"):
+    state = str(state).lower().strip()
+    if state in ("on", "enable", "1"):
+        target = "enable"
+    elif state in ("off", "disable", "0"):
+        target = "disable"
+    else:
+        # Auto-detect current state
+        try:
+            out = subprocess.run(
+                ["netsh", "wlan", "show", "interfaces"],
+                capture_output=True, text=True, timeout=10
+            ).stdout
+            target = "disable" if "connected" in out.lower() else "enable"
+        except Exception:
+            target = "enable"
+    for iface in ["Wi-Fi", "Wi-Fi 2", "Wireless Network Connection", "WLAN"]:
+        result = subprocess.run(
+            ["netsh", "interface", "set", "interface", iface, f"admin={target}"],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            return f"WiFi {target}d via {iface}."
+    return f"Could not toggle WiFi. May require admin privileges."
+
+
+def wifi_list():
+    try:
+        result = subprocess.run(
+            ["netsh", "wlan", "show", "networks", "mode=bssid"],
+            capture_output=True, text=True, timeout=15
+        )
+        out = result.stdout + result.stderr
+        if "elevation" in out.lower() or "administrator" in out.lower():
+            return "WiFi scan requires admin privileges."
+        networks = []
+        current = {}
+        for line in out.splitlines():
+            line = line.strip()
+            if line.startswith("SSID") and not line.startswith("BSS"):
+                if current.get("name"):
+                    networks.append(current)
+                current = {"name": line.split(":", 1)[-1].strip()}
+            elif "Authentication" in line:
+                current["auth"] = line.split(":", 1)[-1].strip()
+            elif "Signal" in line:
+                current["signal"] = line.split(":", 1)[-1].strip()
+        if current.get("name"):
+            networks.append(current)
+        if not networks:
+            return "No WiFi networks found."
+        lines = []
+        for n in networks[:10]:
+            sig = n.get("signal", "?")
+            auth = n.get("auth", "")
+            lines.append(f"{n['name']} ({sig} signal, {auth})")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"WiFi list failed: {e}"
+
+
+def speed_test():
+    try:
+        import speedtest as st
+        spd = st.Speedtest()
+        spd.get_best_server()
+        download = spd.download() / 1e6
+        upload = spd.upload() / 1e6
+        ping = spd.results.ping
+        return f"Download: {download:.1f} Mbps\nUpload: {upload:.1f} Mbps\nPing: {ping:.0f} ms"
+    except ImportError:
+        return "Speed test requires 'speedtest-cli'. Run: pip install speedtest-cli"
+    except Exception as e:
+        return f"Speed test failed: {e}"
+
+
+def move_file(source, destination):
+    import shutil
+    source = os.path.expanduser(str(source).strip())
+    dest = os.path.expanduser(str(destination).strip())
+    if not os.path.exists(source):
+        return f"Source not found: {source}"
+    try:
+        if os.path.isdir(dest):
+            dest = os.path.join(dest, os.path.basename(source))
+        shutil.move(source, dest)
+        return f"Moved to {dest}"
+    except Exception as e:
+        return f"Move failed: {e}"
+
+
+def copy_file(source, destination):
+    import shutil
+    source = os.path.expanduser(str(source).strip())
+    dest = os.path.expanduser(str(destination).strip())
+    if not os.path.exists(source):
+        return f"Source not found: {source}"
+    try:
+        if os.path.isdir(dest):
+            dest = os.path.join(dest, os.path.basename(source))
+        shutil.copy2(source, dest)
+        return f"Copied to {dest}"
+    except Exception as e:
+        return f"Copy failed: {e}"
+
+
+def delete_file(path):
+    path = os.path.expanduser(str(path).strip())
+    if not os.path.exists(path):
+        return f"File not found: {path}"
+    try:
+        if os.path.isdir(path):
+            import shutil
+            shutil.rmtree(path)
+            return f"Deleted folder: {path}"
+        os.remove(path)
+        return f"Deleted: {path}"
+    except Exception as e:
+        return f"Delete failed: {e}"
+
+
+def open_folder(path):
+    path = os.path.expanduser(str(path).strip())
+    if not os.path.exists(path):
+        return f"Path not found: {path}"
+    try:
+        if os.path.isfile(path):
+            path = os.path.dirname(path)
+        os.startfile(path)
+        return f"Opened {path}"
+    except Exception as e:
+        return f"Could not open folder: {e}"
+
+
+def set_brightness(level):
+    level = max(0, min(100, int(level)))
+    try:
+        import wmi
+        w = wmi.WMI(namespace="wmi")
+        w.WmiMonitorBrightnessMethods()[0].WmiSetBrightness(level, 0)
+        return f"Brightness set to {level}%."
+    except ImportError:
+        # Fallback: use PowerShell
+        try:
+            subprocess.run(
+                ["powershell", "-Command",
+                 f"(Get-WmiObject -Namespace root\\wmi -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1,{level})"],
+                capture_output=True, timeout=10
+            )
+            return f"Brightness set to {level}% (PowerShell fallback)."
+        except Exception:
+            return "Brightness control requires the 'wmi' package. Run: pip install wmi"
+    except Exception as e:
+        return f"Brightness control failed: {e}"
+
+
+def get_brightness():
+    try:
+        import wmi
+        w = wmi.WMI(namespace="wmi")
+        brightness = w.WmiMonitorBrightness()[0].CurrentBrightness
+        return f"Brightness: {brightness}%"
+    except ImportError:
+        try:
+            out = subprocess.check_output(
+                ["powershell", "-Command",
+                 "(Get-WmiObject -Namespace root\\wmi -Class WmiMonitorBrightness).CurrentBrightness"],
+                text=True, timeout=10
+            ).strip()
+            return f"Brightness: {out}%"
+        except Exception:
+            return "Brightness read requires 'wmi' package. Run: pip install wmi"
+    except Exception as e:
+        return f"Brightness read failed: {e}"
+
+
+def shutdown_pc(action="shutdown", timer=0):
+    action = str(action).lower().strip()
+    timer = max(0, int(timer))
+    commands = {
+        "shutdown": f"shutdown /s /t {timer}",
+        "restart": f"shutdown /r /t {timer}",
+        "cancel": "shutdown /a",
+        "hibernate": "rundll32.exe powrprof.dll,SetSuspendState 0,1,0",
+        "sleep": "rundll32.exe powrprof.dll,SetSuspendState 0,1,0",
+    }
+    cmd = commands.get(action)
+    if not cmd:
+        return f"Unknown action '{action}'. Use: shutdown, restart, cancel, hibernate, sleep."
+    try:
+        subprocess.Popen(cmd, shell=True)
+        if timer > 0:
+            return f"PC will {action} in {timer} seconds."
+        return f"PC {action} initiated."
+    except Exception as e:
+        return f"Failed to {action}: {e}"
+
+
+def set_wallpaper(path):
+    path = os.path.expanduser(str(path).strip())
+    if not os.path.exists(path):
+        return f"Image not found: {path}"
+    try:
+        import ctypes
+        ctypes.windll.user32.SystemParametersInfoW(20, 0, path, 3)
+        return f"Wallpaper set to {os.path.basename(path)}"
+    except Exception as e:
+        return f"Failed to set wallpaper: {e}"
+
+
+def maximize_window(title):
+    windows = gw.getWindowsWithTitle(str(title))
+    if not windows:
+        return f"No open window matching '{title}'."
+    win = windows[0]
+    try:
+        if win.isMinimized:
+            win.restore()
+        win.maximize()
+        return f"Maximized: {win.title}"
+    except Exception as e:
+        return f"Could not maximize: {e}"
+
+
+def snap_window(title, direction="left"):
+    windows = gw.getWindowsWithTitle(str(title))
+    if not windows:
+        return f"No open window matching '{title}'."
+    win = windows[0]
+    direction = str(direction).lower().strip()
+    try:
+        if win.isMinimized:
+            win.restore()
+        screen_w = win.screen.width
+        screen_h = win.screen.height
+        if direction in ("left", "l"):
+            win.moveTo(0, 0)
+            win.resizeTo(screen_w // 2, screen_h)
+        elif direction in ("right", "r"):
+            win.moveTo(screen_w // 2, 0)
+            win.resizeTo(screen_w // 2, screen_h)
+        elif direction in ("top", "up", "t", "u"):
+            win.moveTo(0, 0)
+            win.resizeTo(screen_w, screen_h // 2)
+        elif direction in ("bottom", "down", "b", "d"):
+            win.moveTo(0, screen_h // 2)
+            win.resizeTo(screen_w, screen_h // 2)
+        else:
+            return f"Unknown direction '{direction}'. Use: left, right, top, bottom."
+        return f"Snapped {win.title} to {direction}"
+    except Exception as e:
+        return f"Could not snap window: {e}"
+
+
+def screenshot_window(title):
+    windows = gw.getWindowsWithTitle(str(title))
+    if not windows:
+        return f"No open window matching '{title}'."
+    win = windows[0]
+    try:
+        if win.isMinimized:
+            win.restore()
+        os.makedirs(SCREENSHOT_DIR, exist_ok=True)
+        path = os.path.join(SCREENSHOT_DIR, datetime.now().strftime("window_%Y%m%d_%H%M%S.png"))
+        # Use region screenshot
+        region = (win.left, win.top, win.width, win.height)
+        img = pyautogui.screenshot(region=region)
+        img.save(path)
+        return f"Window screenshot saved: {path}"
+    except Exception as e:
+        return f"Could not screenshot window: {e}"

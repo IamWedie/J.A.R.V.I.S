@@ -586,6 +586,107 @@ TOOLS = [
         "description": "Give a morning briefing: weather, Tunisia news, reminders. Say 'give me the briefing' or 'what's the news'.",
         "parameters": {"type": "object", "properties": {}},
     }},
+    {"type": "function", "function": {
+        "name": "wifi_status",
+        "description": "Show current WiFi connection status: SSID, signal strength, IP address.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "wifi_toggle",
+        "description": "Turn WiFi on or off. Use 'on' to enable, 'off' to disable, or omit to toggle.",
+        "parameters": {"type": "object", "properties": {
+            "state": {"type": "string", "enum": ["on", "off"], "description": "on or off"},
+        }},
+    }},
+    {"type": "function", "function": {
+        "name": "wifi_list",
+        "description": "List available WiFi networks nearby.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "speed_test",
+        "description": "Run an internet speed test and return download, upload speeds and ping.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "move_file",
+        "description": "Move or rename a file or folder.",
+        "parameters": {"type": "object", "properties": {
+            "source": {"type": "string", "description": "Current file path"},
+            "destination": {"type": "string", "description": "New file path or folder"},
+        }, "required": ["source", "destination"]},
+    }},
+    {"type": "function", "function": {
+        "name": "copy_file",
+        "description": "Copy a file or folder.",
+        "parameters": {"type": "object", "properties": {
+            "source": {"type": "string", "description": "File to copy"},
+            "destination": {"type": "string", "description": "Where to copy it"},
+        }, "required": ["source", "destination"]},
+    }},
+    {"type": "function", "function": {
+        "name": "delete_file",
+        "description": "Delete a file or folder permanently. Requires user approval.",
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string", "description": "Path to delete"},
+        }, "required": ["path"]},
+    }},
+    {"type": "function", "function": {
+        "name": "open_folder",
+        "description": "Open a folder in File Explorer.",
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string"},
+        }, "required": ["path"]},
+    }},
+    {"type": "function", "function": {
+        "name": "set_brightness",
+        "description": "Set screen brightness (0-100).",
+        "parameters": {"type": "object", "properties": {
+            "level": {"type": "integer", "description": "Brightness percentage 0-100"},
+        }, "required": ["level"]},
+    }},
+    {"type": "function", "function": {
+        "name": "get_brightness",
+        "description": "Get current screen brightness.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "shutdown_pc",
+        "description": "Shutdown, restart, hibernate, sleep, or cancel a scheduled shutdown. Requires user approval.",
+        "parameters": {"type": "object", "properties": {
+            "action": {"type": "string", "enum": ["shutdown", "restart", "hibernate", "sleep", "cancel"], "description": "Action to perform"},
+            "timer": {"type": "integer", "description": "Seconds until action (0 = immediately)"},
+        }, "required": ["action"]},
+    }},
+    {"type": "function", "function": {
+        "name": "set_wallpaper",
+        "description": "Set the desktop wallpaper to a local image file.",
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string", "description": "Path to image file"},
+        }, "required": ["path"]},
+    }},
+    {"type": "function", "function": {
+        "name": "maximize_window",
+        "description": "Maximize a window by its title (partial match).",
+        "parameters": {"type": "object", "properties": {
+            "title": {"type": "string", "description": "Window title or partial match"},
+        }, "required": ["title"]},
+    }},
+    {"type": "function", "function": {
+        "name": "snap_window",
+        "description": "Snap a window to left, right, top, or bottom half of screen.",
+        "parameters": {"type": "object", "properties": {
+            "title": {"type": "string", "description": "Window title or partial match"},
+            "direction": {"type": "string", "enum": ["left", "right", "top", "bottom"], "description": "Direction to snap"},
+        }, "required": ["title", "direction"]},
+    }},
+    {"type": "function", "function": {
+        "name": "screenshot_window",
+        "description": "Take a screenshot of a specific window by its title.",
+        "parameters": {"type": "object", "properties": {
+            "title": {"type": "string", "description": "Window title or partial match"},
+        }, "required": ["title"]},
+    }},
 ]
 
 TOOL_FUNCTIONS = {
@@ -679,6 +780,21 @@ TOOL_FUNCTIONS = {
     "lock_screen": pc_tools.lock_screen,
     "sleep_pc": pc_tools.sleep_pc,
     "morning_briefing": lambda: __import__("core.briefing", fromlist=["build_briefing"]).build_briefing(),
+    "wifi_status": pc_tools.wifi_status,
+    "wifi_toggle": lambda state="toggle": pc_tools.wifi_toggle(state),
+    "wifi_list": pc_tools.wifi_list,
+    "speed_test": pc_tools.speed_test,
+    "move_file": pc_tools.move_file,
+    "copy_file": pc_tools.copy_file,
+    "delete_file": pc_tools.delete_file,
+    "open_folder": pc_tools.open_folder,
+    "set_brightness": pc_tools.set_brightness,
+    "get_brightness": pc_tools.get_brightness,
+    "shutdown_pc": lambda action="shutdown", timer=0: pc_tools.shutdown_pc(action, timer),
+    "set_wallpaper": pc_tools.set_wallpaper,
+    "maximize_window": pc_tools.maximize_window,
+    "snap_window": pc_tools.snap_window,
+    "screenshot_window": pc_tools.screenshot_window,
 }
 
 
@@ -746,12 +862,25 @@ def _memory_context(user_text, speaker=None):
         log.warning(f"memory context failed: {e}")
         return ""
 
-APPROVAL_REQUIRED = {"type_text", "lock_screen", "sleep_pc"}
+APPROVAL_REQUIRED = {
+    "type_text", "lock_screen", "sleep_pc",
+    "close_app", "delete_file", "shutdown_pc",
+    "phone_make_call", "phone_send_sms", "phone_reboot",
+    "phone_shutdown", "phone_delete_file",
+}
 
 APPROVAL_DESCRIPTIONS = {
     "type_text": lambda a: f'Type "{a.get("text", "")[:80]}" into the focused window',
     "lock_screen": lambda a: "Lock the screen",
     "sleep_pc": lambda a: "Put the PC to sleep",
+    "close_app": lambda a: f'Force-close "{a.get("name", "")}"',
+    "delete_file": lambda a: f'Delete "{a.get("path", "")}" permanently',
+    "shutdown_pc": lambda a: f'{a.get("action", "shutdown")} the PC',
+    "phone_make_call": lambda a: f'Call {a.get("number", "unknown")}',
+    "phone_send_sms": lambda a: f'Send SMS to {a.get("number", "unknown")}',
+    "phone_reboot": lambda a: "Reboot the phone",
+    "phone_shutdown": lambda a: "Shut down the phone",
+    "phone_delete_file": lambda a: f'Delete phone file: {a.get("path", "")}',
 }
 
 MAX_TOOL_ROUNDS = 6
@@ -917,7 +1046,7 @@ class Brain:
     def reset_history(self):
         self.history = []
 
-    async def ask(self, user_text, on_chunk=None, speaker=None):
+    async def ask(self, user_text, on_chunk=None, speaker=None, source="ui"):
         speaker_line = f"\nThe person speaking right now is: {speaker}. Address personal facts to them." if speaker else ""
         system_message = {
             "role": "system",
@@ -961,7 +1090,7 @@ class Brain:
                 if fn is None:
                     return call, f"Unknown tool: {name}"
                 if name in APPROVAL_REQUIRED:
-                    approved = await self.request_approval(name, args)
+                    approved = await self.request_approval(name, args, source=source)
                     if not approved:
                         return call, "The user DENIED this action. Do not retry it."
                 try:
@@ -991,22 +1120,85 @@ class Brain:
 
         return "I apologize sir, I could not complete that request."
 
-    async def request_approval(self, name, args):
+    async def request_approval(self, name, args, source="ui"):
+        from core import approval as approval_mod
         desc = APPROVAL_DESCRIPTIONS.get(name, lambda a: name)(args)
-        from server import send_event
-        future = asyncio.get_running_loop().create_future()
-        self.approval_future = future
-        await send_event({
-            "type": "approval_request",
-            "tool": name,
-            "description": desc,
-        })
+        req = approval_mod.create_request(name, desc, source)
+        self.approval_future = req.future
+
+        if source == "voice":
+            await self._voice_approval_flow(name, desc, req)
+        elif source == "telegram":
+            from server import send_event
+            await send_event({
+                "type": "approval_request",
+                "tool": name,
+                "description": desc,
+                "source": "telegram",
+            })
+        else:
+            from server import send_event
+            await send_event({
+                "type": "approval_request",
+                "tool": name,
+                "description": desc,
+                "source": "ui",
+            })
+
+        timeout = 12 if source == "voice" else 120
         try:
-            return await asyncio.wait_for(future, timeout=120)
+            result = await asyncio.wait_for(req.future, timeout=timeout)
+            return result
         except asyncio.TimeoutError:
+            req.resolve(False)
             return False
         finally:
             self.approval_future = None
+            approval_mod.get_pending().pop(name, None)
+
+    async def _voice_approval_flow(self, name, desc, req):
+        import numpy as np
+        from core import config as cfg
+        speaker = None
+        try:
+            from core.tts import Speaker
+            speaker = Speaker(cfg.TTS_VOICE, cfg.TTS_RATE)
+        except Exception:
+            pass
+        try:
+            if speaker:
+                await speaker.speak(f"I need approval: {desc}. Say approve or deny.")
+        except Exception:
+            pass
+
+        try:
+            from core.mic import MicService
+            mic = MicService()
+            try:
+                audio = await asyncio.wait_for(
+                    asyncio.to_thread(mic.capture_command),
+                    timeout=VOICe_APPROVAL_TIMEOUT
+                )
+                if audio is not None and len(audio) > 0:
+                    from core.stt import Transcriber
+                    transcriber = Transcriber()
+                    text = await asyncio.to_thread(
+                        transcriber.transcribe_array, audio
+                    )
+                    text = text.strip().lower()
+                    log.info("voice approval response: %s", text)
+                    if any(w in text for w in ("approve", "yes", "ok", "sure", "confirm", "go", "do it")):
+                        req.resolve(True)
+                        return
+                    req.resolve(False)
+                    return
+            except asyncio.TimeoutError:
+                log.info("voice approval timed out")
+            except Exception as e:
+                log.warning("voice approval capture error: %s", e)
+        except Exception as e:
+            log.warning("voice approval flow error: %s", e)
+        req.resolve(False)
 
     def resolve_approval(self, approved):
         if self.approval_future and not self.approval_future.done():
