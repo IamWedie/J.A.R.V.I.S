@@ -321,12 +321,70 @@ async def voice_pipeline(play_intro):
 
         await send_event({"type": "user_said", "text": user_text})
         await think_and_speak(user_text)
+        asyncio.create_task(follow_up_window())
 
 
 async def text_flow(user_text):
     if current_state != "idle":
         return
     await send_event({"type": "user_said", "text": user_text})
+    async with processing_lock:
+        await think_and_speak(user_text)
+
+
+CONVERSATION_FOLLOWUP = getattr(config, "CONVERSATION_TIMEOUT", 60)
+
+
+async def follow_up_window():
+    if mic.wake_enabled:
+        return
+    if CONVERSATION_FOLLOWUP <= 0:
+        return
+    mic.start_stream()
+    started = time.time()
+    silent_since = None
+    while time.time() - started < CONVERSATION_FOLLOWUP:
+        await asyncio.sleep(0.08)
+        if current_state != "idle":
+            return
+        if mic.level > SILENCE_THRESHOLD:
+            silent_since = None
+        else:
+            if silent_since is None:
+                silent_since = time.time()
+            elif time.time() - silent_since > 2.0:
+                break
+    if current_state != "idle":
+        return
+    mic.begin_command_capture()
+    heard_speech = False
+    started = time.time()
+    silent_since = None
+    while time.time() - started < MAX_RECORD_SECONDS:
+        await asyncio.sleep(0.08)
+        if mic.stop_requested:
+            break
+        if mic.level > SILENCE_THRESHOLD:
+            heard_speech = True
+            silent_since = None
+        elif heard_speech:
+            if silent_since is None:
+                silent_since = time.time()
+            elif time.time() - silent_since > SILENCE_DURATION:
+                break
+    audio = await asyncio.to_thread(mic.end_command_capture)
+    if not audio or len(audio) / SAMPLE_RATE < 0.5:
+        return
+    from core.voiceid import voiceid as _vid
+    if _vid.enrolled:
+        ok = await asyncio.to_thread(_vid.verify, audio)
+        if not ok:
+            return
+    user_text = await asyncio.to_thread(transcriber.transcribe_array, audio)
+    if not user_text:
+        return
+    await send_event({"type": "user_said", "text": user_text})
+    await send_event({"type": "state", "value": "listening"})
     async with processing_lock:
         await think_and_speak(user_text)
 

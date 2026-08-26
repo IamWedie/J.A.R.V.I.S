@@ -33,6 +33,7 @@ TTS_RATE = os.getenv("TTS_RATE", "").strip() or "+30%"
 STARTUP_SOUND = os.getenv("STARTUP_SOUND", "").strip()
 
 WAKE_ENABLED_DEFAULT = os.getenv("WAKE_ENABLED", "").strip().lower() in ("1", "true", "yes")
+CONVERSATION_TIMEOUT = int(os.getenv("CONVERSATION_TIMEOUT", "60").strip() or "60")
 
 
 def resolve_path(p):
