@@ -248,6 +248,12 @@ async def think_and_speak(user_text):
     except asyncio.CancelledError:
         pass
 
+    try:
+        from core import memory
+        memory.auto_learn(user_text, full_reply)
+    except Exception:
+        pass
+
     if _barge_in_text:
         interrupted_text = _barge_in_text
         _barge_in_text = None

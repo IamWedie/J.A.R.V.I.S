@@ -18,6 +18,11 @@ def _connect():
 
 def _init():
     conn = _connect()
+    try:
+        conn.execute("ALTER TABLE facts ADD COLUMN topic TEXT NOT NULL DEFAULT ''")
+    except Exception:
+        pass
+    conn.commit()
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS conversations (
@@ -29,6 +34,7 @@ def _init():
         CREATE TABLE IF NOT EXISTS facts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ts TEXT NOT NULL,
+            topic TEXT NOT NULL DEFAULT '',
             fact TEXT NOT NULL UNIQUE
         );
         CREATE TABLE IF NOT EXISTS devices (
@@ -37,6 +43,7 @@ def _init():
             last_seen TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_conv_ts ON conversations(ts);
+        CREATE INDEX IF NOT EXISTS idx_facts_topic ON facts(topic);
         """
     )
     conn.commit()
@@ -128,6 +135,32 @@ def add_fact(fact):
     return True
 
 
+def upsert_fact(topic, fact):
+    topic = str(topic).strip().lower()
+    fact = str(fact).strip()
+    if not fact:
+        return False
+    with _lock:
+        conn = _connect()
+        existing = conn.execute("SELECT id FROM facts WHERE topic = ?", (topic,)).fetchone()
+        if existing:
+            conn.execute("UPDATE facts SET fact = ?, ts = ? WHERE topic = ?", (fact, _now(), topic))
+        else:
+            conn.execute("INSERT INTO facts (ts, topic, fact) VALUES (?, ?, ?)", (_now(), topic, fact))
+        conn.commit()
+        conn.close()
+    return True
+
+
+def find_facts_by_topic(topic):
+    topic = str(topic).strip().lower()
+    with _lock:
+        conn = _connect()
+        rows = conn.execute("SELECT fact FROM facts WHERE topic = ?", (topic,)).fetchall()
+        conn.close()
+    return [r["fact"] for r in rows]
+
+
 def remove_fact(substring):
     with _lock:
         conn = _connect()
@@ -179,3 +212,54 @@ def stats():
         f = conn.execute("SELECT COUNT(*) AS n FROM facts").fetchone()["n"]
         conn.close()
     return {"conversations": c, "facts": f}
+
+
+import re as _re
+
+_PATTERNS = [
+    (_re.compile(r"\bmy\s+(name|nickname)\s+(?:is|'s)\s+(.+?)[\.\!\?\,]", _re.I), "name"),
+    (_re.compile(r"\b(?:i(?:'m| am)|this is)\s+(.+?)[\.\!\?\,]", _re.I), "name"),
+    (_re.compile(r"\bmy\s+(phone|number|cell)\s+(?:is|'s)\s+(.+?)[\.\!\?\,]", _re.I), "phone"),
+    (_re.compile(r"\bmy\s+(email|mail)\s+(?:is|'s)\s+(.+?)[\.\!\?\,]", _re.I), "email"),
+    (_re.compile(r"\bmy\s+(address|location|live(?:s|ing)?)\s+(?:is|at|in)?\s*(.+?)[\.\!\?\,]", _re.I), "address"),
+    (_re.compile(r"\bi\s+(?:work|work(?:s|ing))\s+(?:at|for|in)\s+(.+?)[\.\!\?\,]", _re.I), "work"),
+    (_re.compile(r"\bmy\s+(?:job|work|profession)\s+(?:is|'s)\s+(.+?)[\.\!\?\,]", _re.I), "work"),
+    (_re.compile(r"\bi\s+(?:study|study(?:s|ing))\s+(.+?)[\.\!\?\,]", _re.I), "study"),
+    (_re.compile(r"\bmy\s+(?:fav(?:ou?rite)?|pref(?:er)?)\s+(\w+)\s+(?:is|'s)\s+(.+?)[\.\!\?\,]", _re.I), "preference"),
+    (_re.compile(r"\bi\s+(?:like|love|enjoy|hate|prefer)\s+(.+?)[\.\!\?\,]", _re.I), "preference"),
+    (_re.compile(r"\bmy\s+(?:birthday|born)\s+(?:is|on)?\s*(.+?)[\.\!\?\,]", _re.I), "birthday"),
+    (_re.compile(r"\bi\s+(?:have|have got)\s+(?:a|an|the)?\s*(.+?)[\.\!\?\,]", _re.I), "possession"),
+    (_re.compile(r"\bi\s+(?:drive|drive(?:s)?)\s+(?:a|an)?\s*(.+?)[\.\!\?\,]", _re.I), "vehicle"),
+    (_re.compile(r"\bi\s+(?:speak|speak(?:s|ing)?|know)\s+(.+?[\.\!\?\,])", _re.I), "language"),
+]
+
+
+def extract_facts(text):
+    text = str(text).strip()
+    if not text or len(text) < 10:
+        return []
+    facts = []
+    for pattern, default_topic in _PATTERNS:
+        for m in pattern.finditer(text):
+            groups = [g.strip() for g in m.groups() if g]
+            if len(groups) >= 2:
+                topic = groups[0].lower().replace(" ", "_")
+                fact = groups[1].strip().rstrip(".!?")
+            elif len(groups) == 1:
+                topic = default_topic
+                fact = groups[0].strip().rstrip(".!?")
+            else:
+                continue
+            if len(fact) > 3 and len(fact) < 200:
+                facts.append((topic, f"{topic}: {fact}"))
+    return facts
+
+
+def auto_learn(user_text, assistant_text):
+    combined = f"{user_text} {assistant_text}"
+    facts = extract_facts(combined)
+    added = 0
+    for topic, fact in facts:
+        if upsert_fact(topic, fact):
+            added += 1
+    return added
