@@ -1181,7 +1181,7 @@ class Brain:
             # Listen for voice response
             await send_event({"type": "state", "state": "listening"})
             audio = await asyncio.wait_for(
-                asyncio.to_thread(capture_command),
+                capture_command(),
                 timeout=VOICE_APPROVAL_TIMEOUT
             )
             await send_event({"type": "state", "state": "idle"})
