@@ -1130,29 +1130,21 @@ class Brain:
         desc = APPROVAL_DESCRIPTIONS.get(name, lambda a: name)(args)
         req = approval_mod.create_request(name, desc, source)
         self.approval_future = req.future
-        log.info("APPROVAL: created for %s [%s], future=%s", name, source, id(req.future))
+        log.info("APPROVAL: created for %s [%s]", name, source)
+
+        from server import send_event
+        await send_event({
+            "type": "approval_request",
+            "tool": name,
+            "description": desc,
+            "source": source,
+        })
+        log.info("APPROVAL: sent approval_request to UI for %s", name)
 
         if source == "voice":
-            await self._voice_approval_flow(name, desc, req)
-        elif source == "telegram":
-            from server import send_event
-            await send_event({
-                "type": "approval_request",
-                "tool": name,
-                "description": desc,
-                "source": "telegram",
-            })
-        else:
-            from server import send_event
-            await send_event({
-                "type": "approval_request",
-                "tool": name,
-                "description": desc,
-                "source": "ui",
-            })
-        log.info("APPROVAL: sent approval_request to UI for %s, waiting...", name)
+            asyncio.create_task(self._voice_approval_flow(name, desc, req))
 
-        timeout = 12 if source == "voice" else 120
+        timeout = approval_mod.VOICE_APPROVAL_TIMEOUT if source == "voice" else 120
         try:
             result = await asyncio.wait_for(req.future, timeout=timeout)
             log.info("APPROVAL: resolved %s = %s", name, result)
@@ -1168,7 +1160,8 @@ class Brain:
 
     async def _voice_approval_flow(self, name, desc, req):
         try:
-            from server import speaker as spk, mic as mic_svc, capture_command, send_event
+            from server import speaker as spk, capture_command, send_event
+            from core.approval import VOICE_APPROVAL_TIMEOUT
             # Play chime
             try:
                 import numpy as np
@@ -1189,7 +1182,7 @@ class Brain:
             await send_event({"type": "state", "state": "listening"})
             audio = await asyncio.wait_for(
                 asyncio.to_thread(capture_command),
-                timeout=VOICe_APPROVAL_TIMEOUT
+                timeout=VOICE_APPROVAL_TIMEOUT
             )
             await send_event({"type": "state", "state": "idle"})
 
@@ -1205,7 +1198,11 @@ class Brain:
                 return
         except asyncio.TimeoutError:
             log.info("voice approval timed out")
-            await send_event({"type": "state", "state": "idle"})
+            try:
+                from server import send_event
+                await send_event({"type": "state", "state": "idle"})
+            except Exception:
+                pass
         except Exception as e:
             log.warning("voice approval flow error: %s", e)
         req.resolve(False)

@@ -6,7 +6,7 @@ from core.logging_setup import get_logger
 
 log = get_logger("approval")
 
-VOICe_APPROVAL_TIMEOUT = 12
+VOICE_APPROVAL_TIMEOUT = 12
 TELEGRAM_APPROVAL_TIMEOUT = 60
 
 
