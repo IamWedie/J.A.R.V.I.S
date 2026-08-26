@@ -109,10 +109,10 @@ def recent_conversations(limit=14):
     with _lock:
         conn = _connect()
         rows = conn.execute(
-            "SELECT ts, role, text FROM conversations ORDER BY id DESC LIMIT ?", (limit,)
+            "SELECT ts, role, text, user FROM conversations ORDER BY id DESC LIMIT ?", (limit,)
         ).fetchall()
         conn.close()
-    return [{"ts": r["ts"], "role": r["role"], "text": r["text"]} for r in reversed(rows)]
+    return [{"ts": r["ts"], "role": r["role"], "text": r["text"], "user": r["user"] or ""} for r in reversed(rows)]
 
 
 def search_conversations(query, limit=6):
