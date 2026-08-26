@@ -57,7 +57,7 @@ class Transcriber:
         text = " ".join(s.text.strip() for s in segments).strip()
         detected = getattr(info, "language", None)
         if lang is None and detected and detected not in ALLOWED_LANGS:
-            retry_lang = "ar"
+            retry_lang = "en"
             segments2, _ = model.transcribe(
                 audio_float32,
                 language=retry_lang,
