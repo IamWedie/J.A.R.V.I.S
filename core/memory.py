@@ -18,10 +18,11 @@ def _connect():
 
 def _init():
     conn = _connect()
-    try:
-        conn.execute("ALTER TABLE facts ADD COLUMN topic TEXT NOT NULL DEFAULT ''")
-    except Exception:
-        pass
+    for table, col in (("facts", "topic"), ("conversations", "user"), ("facts", "user")):
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+        except Exception:
+            pass
     conn.commit()
     conn.executescript(
         """
@@ -29,13 +30,15 @@ def _init():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ts TEXT NOT NULL,
             role TEXT NOT NULL,
-            text TEXT NOT NULL
+            text TEXT NOT NULL,
+            user TEXT NOT NULL DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS facts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ts TEXT NOT NULL,
             topic TEXT NOT NULL DEFAULT '',
-            fact TEXT NOT NULL UNIQUE
+            fact TEXT NOT NULL,
+            user TEXT NOT NULL DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS devices (
             ip TEXT PRIMARY KEY,
@@ -44,6 +47,7 @@ def _init():
         );
         CREATE INDEX IF NOT EXISTS idx_conv_ts ON conversations(ts);
         CREATE INDEX IF NOT EXISTS idx_facts_topic ON facts(topic);
+        CREATE INDEX IF NOT EXISTS idx_facts_user ON facts(user);
         """
     )
     conn.commit()
@@ -87,13 +91,16 @@ def _now():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def log(role, text):
+def log(role, text, user=""):
     text = str(text).strip()
     if not text:
         return
     with _lock:
         conn = _connect()
-        conn.execute("INSERT INTO conversations (ts, role, text) VALUES (?, ?, ?)", (_now(), role, text))
+        conn.execute(
+            "INSERT INTO conversations (ts, role, text, user) VALUES (?, ?, ?, ?)",
+            (_now(), role, text, str(user or "")),
+        )
         conn.commit()
         conn.close()
 
@@ -119,14 +126,17 @@ def search_conversations(query, limit=6):
     return [{"ts": r["ts"], "role": r["role"], "text": r["text"]} for r in rows]
 
 
-def add_fact(fact):
+def add_fact(fact, user=""):
     fact = str(fact).strip()
     if not fact:
         return False
     with _lock:
         conn = _connect()
         try:
-            conn.execute("INSERT INTO facts (ts, fact) VALUES (?, ?)", (_now(), fact))
+            conn.execute(
+                "INSERT INTO facts (ts, topic, fact, user) VALUES (?, '', ?, ?)",
+                (_now(), fact, str(user or "")),
+            )
             conn.commit()
         except sqlite3.IntegrityError:
             conn.close()
@@ -135,28 +145,44 @@ def add_fact(fact):
     return True
 
 
-def upsert_fact(topic, fact):
+def upsert_fact(topic, fact, user=""):
     topic = str(topic).strip().lower()
     fact = str(fact).strip()
+    user = str(user or "").strip().lower()
     if not fact:
         return False
     with _lock:
         conn = _connect()
-        existing = conn.execute("SELECT id FROM facts WHERE topic = ?", (topic,)).fetchone()
+        existing = conn.execute(
+            "SELECT id FROM facts WHERE topic = ? AND user = ?", (topic, user)
+        ).fetchone()
         if existing:
-            conn.execute("UPDATE facts SET fact = ?, ts = ? WHERE topic = ?", (fact, _now(), topic))
+            conn.execute(
+                "UPDATE facts SET fact = ?, ts = ? WHERE id = ?",
+                (fact, _now(), existing["id"]),
+            )
         else:
-            conn.execute("INSERT INTO facts (ts, topic, fact) VALUES (?, ?, ?)", (_now(), topic, fact))
+            try:
+                conn.execute(
+                    "INSERT INTO facts (ts, topic, fact, user) VALUES (?, ?, ?, ?)",
+                    (_now(), topic, fact, user),
+                )
+            except sqlite3.IntegrityError:
+                conn.close()
+                return False
         conn.commit()
         conn.close()
     return True
 
 
-def find_facts_by_topic(topic):
+def find_facts_by_topic(topic, user=""):
     topic = str(topic).strip().lower()
     with _lock:
         conn = _connect()
-        rows = conn.execute("SELECT fact FROM facts WHERE topic = ?", (topic,)).fetchall()
+        rows = conn.execute(
+            "SELECT fact FROM facts WHERE topic = ? AND user = ? ORDER BY id DESC",
+            (topic, str(user or "")),
+        ).fetchall()
         conn.close()
     return [r["fact"] for r in rows]
 
@@ -183,17 +209,33 @@ def _tokens(text):
     return set(w for w in str(text).lower().split() if len(w) > 3)
 
 
-def relevant_facts(user_text, limit=8):
+def relevant_facts(user_text, limit=8, user=None):
     facts = list_facts()
+    if not facts:
+        return []
     if len(facts) <= limit:
         return facts
     q = _tokens(user_text)
+    uname = str(user or "").strip().lower()
     scored = []
-    for f in facts:
-        overlap = len(q & _tokens(f))
-        scored.append((overlap, f))
+    for f in list_facts_with_users():
+        overlap = len(q & _tokens(f["fact"]))
+        bonus = 0
+        if uname and f["user"] == uname:
+            bonus = 10
+        elif f["user"]:
+            bonus = -5
+        scored.append((overlap + bonus, f["fact"]))
     scored.sort(key=lambda x: -x[0])
     return [f for _, f in scored[:limit]]
+
+
+def list_facts_with_users():
+    with _lock:
+        conn = _connect()
+        rows = conn.execute("SELECT fact, user FROM facts ORDER BY id DESC").fetchall()
+        conn.close()
+    return [{"fact": r["fact"], "user": r["user"] or ""} for r in rows]
 
 
 def wipe_memory():
@@ -255,11 +297,11 @@ def extract_facts(text):
     return facts
 
 
-def auto_learn(user_text, assistant_text):
+def auto_learn(user_text, assistant_text, user=""):
     combined = f"{user_text} {assistant_text}"
     facts = extract_facts(combined)
     added = 0
     for topic, fact in facts:
-        if upsert_fact(topic, fact):
+        if upsert_fact(topic, fact, user=user):
             added += 1
     return added

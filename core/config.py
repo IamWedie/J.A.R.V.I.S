@@ -36,6 +36,8 @@ WAKE_ENABLED_DEFAULT = os.getenv("WAKE_ENABLED", "").strip().lower() in ("1", "t
 CONVERSATION_TIMEOUT = int(os.getenv("CONVERSATION_TIMEOUT", "60").strip() or "60")
 STT_LANG = os.getenv("STT_LANG", "").strip() or None
 MULTILINGUAL = os.getenv("MULTILINGUAL", "").strip().lower() in ("1", "true", "yes")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
 
 def resolve_path(p):

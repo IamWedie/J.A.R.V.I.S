@@ -212,7 +212,7 @@ async def api_memory_stats():
     return memory.stats()
 
 
-async def think_and_speak(user_text):
+async def think_and_speak(user_text, speaker_name=None):
     global _barge_in_text
     await set_state("thinking")
     if barge_in_enabled:
@@ -232,7 +232,7 @@ async def think_and_speak(user_text):
             asyncio.create_task(set_state("speaking"))
 
     try:
-        reply = await brain.ask(user_text, on_chunk=on_chunk)
+        reply = await brain.ask(user_text, on_chunk=on_chunk, speaker=speaker_name)
     except Exception as e:
         await send_event({"type": "error", "message": str(e)})
         reply = "Sorry sir, something went wrong."
@@ -250,16 +250,16 @@ async def think_and_speak(user_text):
 
     try:
         from core import memory
-        memory.auto_learn(user_text, full_reply)
+        memory.auto_learn(user_text, full_reply, user=speaker_name or "")
     except Exception:
         pass
 
     if _barge_in_text:
-        interrupted_text = _barge_in_text
+        interrupted_text, barge_speaker = _barge_in_text
         _barge_in_text = None
         print(f"[barge] processing interrupted input: {interrupted_text}")
         await send_event({"type": "user_said", "text": interrupted_text})
-        await think_and_speak(interrupted_text)
+        await think_and_speak(interrupted_text, speaker_name=barge_speaker)
         return
 
     await set_state("idle")
@@ -308,9 +308,10 @@ async def voice_pipeline(play_intro):
             return
 
         from core.voiceid import voiceid as _vid
+        speaker_name = None
         if _vid.enrolled:
-            ok = await asyncio.to_thread(_vid.verify, audio)
-            if not ok:
+            speaker_name = await asyncio.to_thread(_vid.identify, audio)
+            if speaker_name is None:
                 await send_event({"type": "voice_rejected"})
                 try:
                     from core import memory
@@ -326,7 +327,7 @@ async def voice_pipeline(play_intro):
             return
 
         await send_event({"type": "user_said", "text": user_text})
-        await think_and_speak(user_text)
+        await think_and_speak(user_text, speaker=speaker_name)
         asyncio.create_task(follow_up_window())
 
 
@@ -382,9 +383,10 @@ async def follow_up_window():
     if not audio or len(audio) / SAMPLE_RATE < 0.5:
         return
     from core.voiceid import voiceid as _vid
+    fu_speaker = None
     if _vid.enrolled:
-        ok = await asyncio.to_thread(_vid.verify, audio)
-        if not ok:
+        fu_speaker = await asyncio.to_thread(_vid.identify, audio)
+        if fu_speaker is None:
             return
     user_text = await asyncio.to_thread(transcriber.transcribe_array, audio)
     if not user_text:
@@ -392,7 +394,7 @@ async def follow_up_window():
     await send_event({"type": "user_said", "text": user_text})
     await send_event({"type": "state", "value": "listening"})
     async with processing_lock:
-        await think_and_speak(user_text)
+        await think_and_speak(user_text, speaker_name=fu_speaker)
 
 
 async def _barge_in_detector():
@@ -422,15 +424,15 @@ async def _barge_in_detector():
                 audio = await asyncio.to_thread(mic.end_command_capture)
                 if audio is not None and len(audio) / SAMPLE_RATE >= 0.5:
                     from core.voiceid import voiceid as _vid
+                    barge_speaker = None
                     if _vid.enrolled:
-                        ok = await asyncio.to_thread(_vid.verify, audio)
-                        if not ok:
+                        barge_speaker = await asyncio.to_thread(_vid.identify, audio)
+                        if barge_speaker is None:
                             _barge_in_text = None
                             continue
                     text = await asyncio.to_thread(transcriber.transcribe_array, audio)
                     if text:
-                        _barge_in_text = text
-                        await send_event({"type": "user_said", "text": text})
+                        _barge_in_text = (text, barge_speaker)
                 break
         else:
             barge_start = None
@@ -670,6 +672,11 @@ async def startup():
 
     async def _on_reminder(msg):
         await send_event({"type": "reminder", "message": msg})
+        try:
+            from core.net import telegram_bot
+            telegram_bot.telegram_notify(f"⏰ Reminder: {msg}")
+        except Exception:
+            pass
         speaker.stop()
         await send_event({"type": "state", "value": "speaking"})
         await speaker.speak(f"Reminder: {msg}")
@@ -678,6 +685,11 @@ async def startup():
     from core import scheduler
     scheduler.init(main_loop, _on_reminder)
     scheduler.start_checker()
+    try:
+        from core.net import telegram_bot
+        telegram_bot.start()
+    except Exception as e:
+        print(f"telegram start failed: {e}")
 
 
 _startup_audio = None

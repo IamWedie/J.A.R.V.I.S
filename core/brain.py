@@ -125,6 +125,13 @@ TOOLS = [
         }},
     }},
     {"type": "function", "function": {
+        "name": "telegram_notify",
+        "description": "Push a message to the owner's Telegram chat (works even when away from the PC).",
+        "parameters": {"type": "object", "properties": {
+            "message": {"type": "string"},
+        }, "required": ["message"]},
+    }},
+    {"type": "function", "function": {
         "name": "system_info",
         "description": "Get CPU %, RAM %, battery status, disk usage.",
         "parameters": {"type": "object", "properties": {}},
@@ -586,6 +593,7 @@ TOOL_FUNCTIONS = {
     "set_alarm": scheduler.set_alarm,
     "list_reminders": scheduler.list_reminders,
     "cancel_reminder": lambda keyword="": scheduler.cancel_reminder(keyword),
+    "telegram_notify": lambda message: _telegram_notify_safe(message),
     "system_info": pc_tools.system_info,
     "top_processes": pc_tools.top_processes,
     "list_running_apps": pc_tools.list_running_apps,
@@ -702,16 +710,25 @@ def _run_agent(goal):
         return future.result(timeout=180)
 
 
-def _memory_context(user_text):
+def _telegram_notify_safe(message):
     try:
-        facts = memory.relevant_facts(user_text)
+        from core.net import telegram_bot
+        return telegram_bot.telegram_notify(message)
+    except Exception as e:
+        return f"Telegram unavailable: {e}"
+
+
+def _memory_context(user_text, speaker=None):
+    try:
+        facts = memory.relevant_facts(user_text, user=speaker)
         recent = memory.recent_conversations(14)
         parts = []
         if facts:
             parts.append("Known facts:\n" + "\n".join(f"- {f}" for f in facts))
         if recent:
             parts.append("Recent conversation:\n" + "\n".join(
-                f"{r['role']}: {r['text'][:160]}" for r in recent
+                f"{(r.get('user') + ' (' if r.get('user') else '')}{r['role']}{')' if r.get('user') else ''}: {r['text'][:160]}"
+                for r in recent
             ))
         if not parts:
             return ""
@@ -891,10 +908,11 @@ class Brain:
     def reset_history(self):
         self.history = []
 
-    async def ask(self, user_text, on_chunk=None):
+    async def ask(self, user_text, on_chunk=None, speaker=None):
+        speaker_line = f"\nThe person speaking right now is: {speaker}. Address personal facts to them." if speaker else ""
         system_message = {
             "role": "system",
-            "content": SYSTEM_PROMPT + f"\nCurrent date and time: {datetime.now():%A %d %B %Y, %H:%M}." + _memory_context(user_text),
+            "content": SYSTEM_PROMPT + f"\nCurrent date and time: {datetime.now():%A %d %B %Y, %H:%M}." + speaker_line + _memory_context(user_text, speaker=speaker),
         }
         messages = [system_message] + self.history + [
             {"role": "user", "content": user_text}
@@ -910,7 +928,7 @@ class Brain:
                 self.history.append({"role": "user", "content": user_text})
                 self.history.append({"role": "assistant", "content": reply})
                 try:
-                    memory.log("user", user_text)
+                    memory.log("user", user_text, user=speaker or "")
                     memory.log("assistant", reply)
                 except Exception as e:
                     print(f"memory log failed: {e}")
