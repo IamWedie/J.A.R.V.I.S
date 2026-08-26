@@ -662,6 +662,17 @@ async def startup():
     asyncio.create_task(away_watcher())
     netmsg.start_receiver()
 
+    async def _on_reminder(msg):
+        await send_event({"type": "reminder", "message": msg})
+        speaker.stop()
+        await send_event({"type": "state", "value": "speaking"})
+        await speaker.speak(f"Reminder: {msg}")
+        await set_state("idle")
+
+    from core import scheduler
+    scheduler.init(main_loop, _on_reminder)
+    scheduler.start_checker()
+
 
 _startup_audio = None
 

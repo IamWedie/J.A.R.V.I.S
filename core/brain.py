@@ -13,6 +13,7 @@ from core.net import adb_controller
 from core.net import agent as phone_agent
 from core.net import netmsg
 from core.tools import pc_tools, web_tools
+from core import scheduler
 
 SYSTEM_PROMPT = (
     "You are JARVIS, a witty, precise AI assistant with a voice, living on the user's Windows PC. "
@@ -92,6 +93,34 @@ TOOLS = [
         "name": "describe_screen",
         "description": "Read what's currently on screen: active window title + OCR text. Use to answer 'what am I looking at'.",
         "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "set_reminder",
+        "description": "Set a reminder that fires after a delay. Use natural language for the delay ('20 minutes', '2 hours').",
+        "parameters": {"type": "object", "properties": {
+            "minutes": {"type": "number", "description": "Minutes from now"},
+            "message": {"type": "string", "description": "What to remind about"},
+        }, "required": ["minutes", "message"]},
+    }},
+    {"type": "function", "function": {
+        "name": "set_alarm",
+        "description": "Set an alarm for a specific time of day (24h format like '15:00' or '3:00 PM').",
+        "parameters": {"type": "object", "properties": {
+            "time": {"type": "string", "description": "Time like '15:00' or '3:00 PM'"},
+            "message": {"type": "string", "description": "Optional alarm label"},
+        }, "required": ["time"]},
+    }},
+    {"type": "function", "function": {
+        "name": "list_reminders",
+        "description": "List all pending reminders and alarms.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "cancel_reminder",
+        "description": "Cancel reminders. Pass a keyword to cancel matching ones, or empty string to cancel all.",
+        "parameters": {"type": "object", "properties": {
+            "keyword": {"type": "string"},
+        }},
     }},
     {"type": "function", "function": {
         "name": "system_info",
@@ -551,6 +580,10 @@ TOOL_FUNCTIONS = {
     "take_screenshot": pc_tools.take_screenshot,
     "ocr_screenshot": pc_tools.ocr_screenshot,
     "describe_screen": pc_tools.describe_screen,
+    "set_reminder": lambda minutes, message: scheduler.set_reminder(int(minutes * 60), message),
+    "set_alarm": scheduler.set_alarm,
+    "list_reminders": scheduler.list_reminders,
+    "cancel_reminder": lambda keyword="": scheduler.cancel_reminder(keyword),
     "system_info": pc_tools.system_info,
     "top_processes": pc_tools.top_processes,
     "list_running_apps": pc_tools.list_running_apps,
