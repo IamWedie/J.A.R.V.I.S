@@ -144,7 +144,18 @@ def ocr_screenshot():
         async def _ocr():
             return await winocr.recognize_pil(pil_img, lang="en")
 
-        result = asyncio.run(_ocr())
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                result = pool.submit(asyncio.run, _ocr()).result(timeout=15)
+        else:
+            result = asyncio.run(_ocr())
+
         text = result.text if result else ""
         if not text.strip():
             return "No text detected on screen."
@@ -175,7 +186,18 @@ def describe_screen():
         async def _ocr():
             return await winocr.recognize_pil(pil_img, lang="en")
 
-        result = asyncio.run(_ocr())
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                result = pool.submit(asyncio.run, _ocr()).result(timeout=15)
+        else:
+            result = asyncio.run(_ocr())
+
         text = result.text if result else ""
         parts = []
         if active:
