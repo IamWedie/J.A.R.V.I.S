@@ -112,27 +112,25 @@ models/                 bundled whisper models (gitignored)
 
 ## Roadmap
 
-### Phase A — Pending
+### Phase A — Core
 - [x] Smart message router (device names → ADB/Cast/HTTP)
-- [ ] Selfie end-to-end verification (flash + switch)
-- [ ] PLAN.md rewrite (this file)
+- [x] Selfie end-to-end verification (correct switch coords, state tracking, selfie_verify())
+- [x] PLAN.md rewrite
 
 ### Phase B — Feel Alive
-- [ ] Barge-in: mic hot during speech, stops JARVIS on user voice
-- [ ] Conversation mode: 60s follow-up window, no wake word
-- [ ] Screen awareness: "what am I looking at" → OCR → spoken
-- [ ] Reminders/alarms: background scheduler → voice + phone notification
+- [x] Barge-in: mic hot during speech, stops JARVIS on user voice
+- [x] Conversation mode: 60s follow-up window, no wake word
+- [x] Screen awareness: "what am I looking at" → OCR → spoken
+- [x] Reminders/alarms: background scheduler → voice + phone notification
 
 ### Phase C — Depth
-- [x] Derja prep: multilingual whisper STT (auto-detect), ar-TN-HediNeural voice, language-matching prompt
-      (activate via .env: STT_MODEL=small, STT_LANG=auto, TTS_VOICE=ar-TN-HediNeural)
+- [x] Derja prep: multilingual whisper STT (auto-detect), Hedi + Reem voices, language-matching prompt
 - [x] Auto-learning: pattern-based fact extraction, topic upserts, corrections overwrite
 - [x] Per-user voice ID: multi-profile identify(), attributed memories/facts, legacy migration
-- [x] Telegram bot brain: long-polling, owner-lock on /start, telegram_notify tool, reminder relay
-- [ ] Local vision: Moondream2 via llama-server (download running; setup_vision.py ready)
+- [x] Telegram bot brain: long-polling, owner-lock, telegram_notify tool, reminder relay
+- [ ] Local vision: Moondream2 downloaded + server runs, but Q8_0 quality too low for reliable use
 - [ ] UI automation depth (per-app volume, WiFi/dark mode toggles)
 
 ### Phase D — Polish
 - [ ] Morning briefing (weather/calendar/news)
-- [ ] UI automation depth (per-app volume, WiFi/dark mode toggles)
 - [ ] Crash watchdog + auto-restart
