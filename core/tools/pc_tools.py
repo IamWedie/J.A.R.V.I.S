@@ -129,6 +129,66 @@ def take_screenshot():
     return f"Screenshot saved to {path}"
 
 
+def ocr_screenshot():
+    try:
+        import winocr
+        import PIL.Image
+        import io
+        import asyncio
+        img = pyautogui.screenshot()
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        pil_img = PIL.Image.open(buf)
+
+        async def _ocr():
+            return await winocr.recognize_pil(pil_img, lang="en")
+
+        result = asyncio.run(_ocr())
+        text = result.text if result else ""
+        if not text.strip():
+            return "No text detected on screen."
+        return text.strip()
+    except Exception as e:
+        return f"OCR failed: {e}"
+
+
+def describe_screen():
+    try:
+        import winocr
+        import PIL.Image
+        import io
+        import asyncio
+        active = ""
+        try:
+            w = gw.getActiveWindow()
+            if w:
+                active = w.title or ""
+        except Exception:
+            pass
+        img = pyautogui.screenshot()
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        pil_img = PIL.Image.open(buf)
+
+        async def _ocr():
+            return await winocr.recognize_pil(pil_img, lang="en")
+
+        result = asyncio.run(_ocr())
+        text = result.text if result else ""
+        parts = []
+        if active:
+            parts.append(f"Active window: {active}")
+        if text.strip():
+            parts.append(f"Visible text:\n{text.strip()[:2000]}")
+        if not parts:
+            return "No readable content on screen."
+        return "\n\n".join(parts)
+    except Exception as e:
+        return f"Screen read failed: {e}"
+
+
 def system_info():
     cpu = psutil.cpu_percent(interval=0.5)
     mem = psutil.virtual_memory()

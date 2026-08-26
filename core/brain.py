@@ -22,6 +22,7 @@ SYSTEM_PROMPT = (
     "Tool rules:\n"
     "- For greetings, thanks, farewells, opinions, or general chat, reply directly WITHOUT tools.\n"
     "- Use tools when the request needs a PC action or live data.\n"
+    "- When the user asks 'what am I looking at' or 'read my screen', use describe_screen to get the active window + OCR text, then explain it conversationally.\n"
     "- After a tool result arrives, answer briefly using it; never invent values that were not returned.\n"
     "- NEVER close an app unless explicitly asked. NEVER repeat a tool call with identical arguments.\n"
     "- You have PERMANENT local memory. When the user asks you to remember something, call remember_fact. "
@@ -80,6 +81,16 @@ TOOLS = [
     {"type": "function", "function": {
         "name": "take_screenshot",
         "description": "Capture the screen and save it as an image file.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "ocr_screenshot",
+        "description": "Take a screenshot and extract all visible text via OCR. Returns the raw text.",
+        "parameters": {"type": "object", "properties": {}},
+    }},
+    {"type": "function", "function": {
+        "name": "describe_screen",
+        "description": "Read what's currently on screen: active window title + OCR text. Use to answer 'what am I looking at'.",
         "parameters": {"type": "object", "properties": {}},
     }},
     {"type": "function", "function": {
@@ -538,6 +549,8 @@ TOOL_FUNCTIONS = {
     "get_volume": pc_tools.get_volume,
     "media_key": pc_tools.media_key,
     "take_screenshot": pc_tools.take_screenshot,
+    "ocr_screenshot": pc_tools.ocr_screenshot,
+    "describe_screen": pc_tools.describe_screen,
     "system_info": pc_tools.system_info,
     "top_processes": pc_tools.top_processes,
     "list_running_apps": pc_tools.list_running_apps,
