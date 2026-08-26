@@ -38,8 +38,9 @@ SYSTEM_PROMPT = (
     "'set an alarm'), use phone_agent — it autonomously takes screenshots, reads the screen, and executes "
     "the needed taps/swipes/types to accomplish the goal.\n"
     "- Never mention tools, JSON, or result mechanics; speak naturally.\n"
-    "- You can send messages to other devices on the network: use net_send_message for a specific device IP, "
-    "or net_broadcast to message all devices. Use net_read_messages to check incoming messages."
+    "- You can send messages to other devices on the network: use net_send_message with a device name "
+    "('my TV', 'my phone') or IP address — JARVIS auto-routes via notification (phone), cast (TV), or HTTP. "
+    "Use net_broadcast for all devices. Use net_read_messages to check incoming messages."
 )
 
 TOOLS = [
@@ -500,11 +501,11 @@ TOOLS = [
     }},
     {"type": "function", "function": {
         "name": "net_send_message",
-        "description": "Send a message to a specific device on the network by IP address.",
+        "description": "Send a message to a device on the network. Accepts a device name ('my TV', 'my phone') or IP address. JARVIS auto-routes via ADB notification (phone), Chromecast cast (TV), or HTTP.",
         "parameters": {"type": "object", "properties": {
-            "ip": {"type": "string"},
+            "target": {"type": "string", "description": "Device name or IP address"},
             "message": {"type": "string"},
-        }, "required": ["ip", "message"]},
+        }, "required": ["target", "message"]},
     }},
     {"type": "function", "function": {
         "name": "net_broadcast",
@@ -608,7 +609,7 @@ TOOL_FUNCTIONS = {
     "phone_shutdown": adb_controller.shutdown,
     "phone_contacts": adb_controller.list_contacts,
     "phone_agent": lambda goal: _run_agent(goal),
-    "net_send_message": netmsg.send_message,
+    "net_send_message": netmsg.send_to_device,
     "net_broadcast": netmsg.send_broadcast,
     "net_read_messages": lambda: netmsg.get_messages(),
     "lock_screen": pc_tools.lock_screen,
