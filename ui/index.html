@@ -14,60 +14,60 @@
 <div id="toastContainer" aria-live="polite" aria-atomic="true"></div>
 
 <div id="setupWizard" class="hidden" role="dialog" aria-label="Setup wizard">
-    <div class="wizTitle">J.A.R.V.I.S SETUP</div>
+    <div class="wizTitle" data-i18n="setup_title">J.A.R.V.I.S SETUP</div>
 
     <div id="wizStep1" class="wizStep" role="group" aria-label="Step 1: Terms of Use">
-        <div class="wizHeading">1. Terms of Use</div>
+        <div class="wizHeading" data-i18n="terms_heading">1. Terms of Use</div>
         <div id="termsBox" role="document" aria-label="Terms of Use text">loading...</div>
-        <label class="agreeRow"><input type="checkbox" id="agreeChk" aria-required="true"> I have read and agree to the Terms of Use</label>
-        <button id="agreeBtn" class="wizBtn" disabled>CONTINUE</button>
+        <label class="agreeRow"><input type="checkbox" id="agreeChk" aria-required="true"> <span data-i18n="terms_agree">I have read and agree to the Terms of Use</span></label>
+        <button id="agreeBtn" class="wizBtn" disabled data-i18n="continue">CONTINUE</button>
     </div>
 
     <div id="wizStep2" class="wizStep hidden" role="group" aria-label="Step 2: API Key">
-        <div class="wizHeading">2. Your Zen API key</div>
-        <p class="hint">Create one free at <b>opencode.ai/auth</b>, then paste it here.</p>
+        <div class="wizHeading" data-i18n="api_key_heading">2. Your Zen API key</div>
+        <p class="hint"><span data-i18n="api_key_hint_pre">Create one free at</span> <b>opencode.ai/auth</b><span data-i18n="api_key_hint_post">, then paste it here.</span></p>
         <input type="password" id="keyInput" placeholder="sk-..." autocomplete="off" aria-label="API key">
-        <button id="validateKeyBtn" class="wizBtn">VALIDATE KEY</button>
+        <button id="validateKeyBtn" class="wizBtn" data-i18n="validate_key">VALIDATE KEY</button>
         <div id="keyStatus" aria-live="polite"></div>
     </div>
 
     <div id="wizStep3Check" class="wizStep hidden" role="group" aria-label="Step 3: System check">
-        <div class="wizHeading">3. System check</div>
-        <p class="hint">Making sure your hardware is ready...</p>
+        <div class="wizHeading" data-i18n="system_check_heading">3. System check</div>
+        <p class="hint" data-i18n="system_check_hint">Making sure your hardware is ready...</p>
         <div id="checkResults">
-            <div class="checkRow" id="checkMic"><span class="spinner"></span>Microphone</div>
-            <div class="checkRow" id="checkSpeaker"><span class="spinner"></span>Speakers</div>
-            <div class="checkRow" id="checkInternet"><span class="spinner"></span>Internet</div>
-            <div class="checkRow" id="checkSTT"><span class="spinner"></span>Voice engine</div>
+            <div class="checkRow" id="checkMic"><span class="spinner"></span><span data-i18n="mic">Microphone</span></div>
+            <div class="checkRow" id="checkSpeaker"><span class="spinner"></span><span data-i18n="speakers">Speakers</span></div>
+            <div class="checkRow" id="checkInternet"><span class="spinner"></span><span data-i18n="internet">Internet</span></div>
+            <div class="checkRow" id="checkSTT"><span class="spinner"></span><span data-i18n="voice_engine">Voice engine</span></div>
         </div>
-        <button id="checkNextBtn" class="wizBtn" disabled>CONTINUE</button>
+        <button id="checkNextBtn" class="wizBtn" disabled data-i18n="continue">CONTINUE</button>
     </div>
 
     <div id="wizStep3" class="wizStep hidden" role="group" aria-label="Step 4: Choose brain model">
-        <div class="wizHeading">4. Pick JARVIS's brain</div>
-        <p class="hint">Free models are listed first. You can change this anytime in the top bar.</p>
+        <div class="wizHeading" data-i18n="brain_heading">4. Pick JARVIS's brain</div>
+        <p class="hint" data-i18n="brain_hint">Free models are listed first. You can change this anytime in the top bar.</p>
         <select id="wizardModelSelect" size="8" aria-label="Select brain model"></select>
-        <button id="saveModelBtn" class="wizBtn">SAVE &amp; CONTINUE</button>
+        <button id="saveModelBtn" class="wizBtn" data-i18n="save_continue">SAVE &amp; CONTINUE</button>
     </div>
 
     <div id="wizStep4" class="wizStep hidden" role="group" aria-label="Step 5: Voice lock">
-        <div class="wizHeading">5. Voice lock (optional)</div>
-        <p class="hint">Enroll your voice so only you can command JARVIS by wake word. You can skip this and do it later in settings (gear icon).</p>
-        <button id="wizEnrollBtn" class="wizBtn">ENROLL MY VOICE</button>
-        <button id="wizSkipBtn" class="wizBtn skip">SKIP FOR NOW</button>
+        <div class="wizHeading" data-i18n="voice_heading">5. Voice lock (optional)</div>
+        <p class="hint" data-i18n="voice_hint">Enroll your voice so only you can command JARVIS by wake word. You can skip this and do it later in settings (gear icon).</p>
+        <button id="wizEnrollBtn" class="wizBtn" data-i18n="enroll_voice">ENROLL MY VOICE</button>
+        <button id="wizSkipBtn" class="wizBtn skip" data-i18n="skip">SKIP FOR NOW</button>
         <div id="enrollStatus2" aria-live="polite"></div>
     </div>
 
     <div id="wizDone" class="hidden">
-        <div class="wizHeading">All set, sir.</div>
-        <button id="wizFinishBtn" class="wizBtn">START JARVIS</button>
+        <div class="wizHeading" data-i18n="all_set">All set, sir.</div>
+        <button id="wizFinishBtn" class="wizBtn" data-i18n="start">START JARVIS</button>
     </div>
 </div>
 
     <div id="enrollBanner" class="hidden" role="alert" aria-live="assertive">
         <div id="enrollStep">PHRASE 1 OF 3</div>
         <div id="enrollPhrase">"..."</div>
-        <div id="enrollHint">read it out loud, then pause</div>
+        <div id="enrollHint"></div>
     </div>
 
     <div id="app" role="main">
@@ -81,12 +81,12 @@
     </div>
 
     <div id="settingsPanel" class="hidden" role="region" aria-label="Settings">
-        <div class="settingsRow"><span>Voice lock</span><span id="voiceStatus">checking...</span></div>
-        <button id="enrollBtn" aria-label="Enroll voice fingerprint">ENROLL MY VOICE</button>
-        <button id="resetVoiceBtn" class="danger" aria-label="Reset voice fingerprint">RESET FINGERPRINT</button>
-        <button id="wipeMemoryBtn" class="danger" aria-label="Wipe all memory">FORGET EVERYTHING</button>
+        <div class="settingsRow"><span data-i18n="voice_lock">Voice lock</span><span id="voiceStatus">checking...</span></div>
+        <button id="enrollBtn" aria-label="Enroll voice fingerprint" data-i18n="enroll_voice">ENROLL MY VOICE</button>
+        <button id="resetVoiceBtn" class="danger" aria-label="Reset voice fingerprint" data-i18n="reset_fingerprint">RESET FINGERPRINT</button>
+        <button id="wipeMemoryBtn" class="danger" aria-label="Wipe all memory" data-i18n="forget_everything">FORGET EVERYTHING</button>
         <div class="settingsRow"><span id="memStats"></span></div>
-        <div class="settingsRow" style="margin-top:10px"><span>Voice &amp; speed</span></div>
+        <div class="settingsRow" style="margin-top:10px"><span data-i18n="voice_speed">Voice &amp; speed</span></div>
         <select id="voiceSelect" aria-label="Select TTS voice"></select>
         <select id="rateSelect" aria-label="Select speech rate">
             <option value="+0%">Speed +0%</option>
@@ -95,7 +95,7 @@
             <option value="+40%">Speed +40%</option>
             <option value="+50%">Speed +50%</option>
         </select>
-        <button id="testVoiceBtn" aria-label="Test voice output">TEST VOICE</button>
+        <button id="testVoiceBtn" aria-label="Test voice output" data-i18n="test_voice">TEST VOICE</button>
         <div class="settingsDivider"></div>
         <div class="settingsRow"><span>Language</span></div>
         <select id="langSelect" aria-label="Select UI language">
@@ -103,22 +103,22 @@
             <option value="ar">العربية</option>
         </select>
         <div class="settingsDivider"></div>
-        <button id="updateBtn" class="update" aria-label="Check for updates">CHECK FOR UPDATES</button>
+        <button id="updateBtn" class="update" aria-label="Check for updates" data-i18n="check_updates">CHECK FOR UPDATES</button>
         <p class="hint">Version: <span id="versionLabel">...</span></p>
-        <p class="hint">Enroll = say 3 short phrases. After that JARVIS only obeys this voice via wake word.</p>
+        <p class="hint" data-i18n="enroll_info">Enroll = say 3 short phrases. After that JARVIS only obeys this voice via wake word.</p>
     </div>
 
     <canvas id="face" role="img" aria-label="JARVIS animated face"></canvas>
-    <div id="status" aria-live="polite">Online</div>
-    <div id="offlineBanner" class="hidden" role="alert">No internet connection — voice and AI features unavailable</div>
+    <div id="status" aria-live="polite" data-i18n="online">Online</div>
+    <div id="offlineBanner" class="hidden" role="alert" data-i18n="no_internet">No internet connection — voice and AI features unavailable</div>
 
     <div id="chatlog" role="log" aria-label="Conversation history" aria-live="polite"></div>
 
     <div id="approvalBox" class="hidden" role="alertdialog" aria-label="Approval required">
         <div id="approvalText"></div>
         <div class="approvalButtons">
-            <button id="btnDeny" class="deny" aria-label="Deny request">DENY</button>
-            <button id="btnApprove" class="approve" aria-label="Approve request">APPROVE</button>
+            <button id="btnDeny" class="deny" aria-label="Deny request" data-i18n="deny">DENY</button>
+            <button id="btnApprove" class="approve" aria-label="Approve request" data-i18n="approve">APPROVE</button>
         </div>
     </div>
 
@@ -129,7 +129,7 @@
                 <path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V20H8a1 1 0 1 0 0 2h8a1 1 0 1 0 0-2h-3v-2.08A7 7 0 0 0 19 11z"/>
             </svg>
         </button>
-        <input id="textInput" type="text" placeholder="Type a command..." autocomplete="off" aria-label="Type a command">
+        <input id="textInput" type="text" placeholder="Type a command..." autocomplete="off" aria-label="Type a command" data-i18n-placeholder="type_command">
         <button id="sendBtn" aria-label="Send message">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
                 <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/>
