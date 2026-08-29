@@ -62,6 +62,9 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 PHONE_PIN = os.getenv("PHONE_PIN", "").strip()
 JARVIS_PIN = os.getenv("JARVIS_PIN", "").strip()
+JARVIS_PIN_MIN_LENGTH = int(os.getenv("JARVIS_PIN_MIN_LENGTH", "6").strip() or "6")
+PIN_MAX_ATTEMPTS = int(os.getenv("PIN_MAX_ATTEMPTS", "5").strip() or "5")
+PIN_LOCKOUT_SECONDS = int(os.getenv("PIN_LOCKOUT_SECONDS", "300").strip() or "300")
 PHONE_ADDR = os.getenv("PHONE_ADDR", "").strip()
 PHONE_PORT = int((os.getenv("PHONE_PORT", "5555").strip() or "5555"))
 PHONE_SERIAL = os.getenv("PHONE_SERIAL", "").strip()
@@ -105,6 +108,37 @@ def save_settings(updates):
             f.write(line + "\n")
         for k, v in existing.items():
             f.write(f"{k}={v}\n")
+
+
+def validate_pin(pin):
+    """Return (bool, reason) for a proposed JARVIS_PIN.
+
+    Public-release safety: the approval PIN must not be trivially guessable, and
+    must not fall back to a default when unset. Keys are checked against a small
+    blocklist of the most common defaults (e.g. '0910', '1234', '0000')."""
+    pin = (pin or "").strip()
+    if not pin:
+        return False, "PIN is not set — set JARVIS_PIN (at least {} characters).".format(JARVIS_PIN_MIN_LENGTH)
+    if len(pin) < JARVIS_PIN_MIN_LENGTH:
+        return False, "PIN is too short — minimum {} characters.".format(JARVIS_PIN_MIN_LENGTH)
+    if pin.isdigit() and len(pin) <= 6 and pin in _WEAK_NUMERIC_PINS:
+        return False, "PIN is a common default — choose something harder to guess."
+    return True, ""
+
+
+_WEAK_NUMERIC_PINS = {
+    "0", "00", "000", "0000", "00000", "000000",
+    "1111", "2222", "3333", "4444", "5555", "6666", "7777", "8888", "9999",
+    "1234", "12345", "123456", "4321", "9876", "2580",
+    "0910", "1004", "1212", "1122", "6969", "1590", "7777", "654321", "112233",
+    "000000", "0101", "0011", "1010", "111",
+}
+
+
+def pin_is_strong():
+    """True if the configured JARVIS_PIN passes validate_pin."""
+    valid, _ = validate_pin(JARVIS_PIN)
+    return valid
 
 
 VOICE_CHOICES = [

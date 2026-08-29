@@ -484,7 +484,9 @@ def selfie_verify():
         time.sleep(1)
     if is_locked():
         import core.config as cfg
-        pin = getattr(cfg, "PHONE_PIN", "") or "0910"
+        pin = getattr(cfg, "PHONE_PIN", "")
+        if not pin:
+            return None, "Phone is locked and PHONE_PIN is not set — configure it to auto-unlock for selfies."
         unlock_with_pin(pin)
         time.sleep(2)
     if is_in_use():

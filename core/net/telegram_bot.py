@@ -95,19 +95,23 @@ def _handle_update(update):
 
     if text.startswith("/pin"):
         from core import approval as approval_mod
+        lock = approval_mod.pin_lockout_status(chat_id)
+        if lock["locked"]:
+            _send(chat_id, f"Locked out — too many wrong PIN attempts. Try again in {lock['remaining']}s.")
+            return
         parts = text.split(maxsplit=1)
         if len(parts) < 2:
             _send(chat_id, "Usage: /pin <PIN_CODE>")
             return
         pin = parts[1].strip()
-        approved, desc = approval_mod.resolve_by_pin(pin)
+        approved, desc = approval_mod.resolve_by_pin(pin, source_id=chat_id)
         if approved:
             _send(chat_id, f"Approved: {desc}")
         else:
             pending = approval_mod.get_pending()
             if pending:
                 tool_name = list(pending.keys())[0]
-                _send(chat_id, f"Wrong PIN. Still waiting for approval: {tool_name}")
+                _send(chat_id, f"Wrong PIN ({lock['attempts_left'] - 1} left). Still waiting for approval: {tool_name}")
             else:
                 _send(chat_id, "Wrong PIN or no pending approval.")
         return
@@ -143,6 +147,9 @@ def start():
     global _thread
     if not _config_token():
         return False
+    ok, reason = config.validate_pin(getattr(config, "JARVIS_PIN", ""))
+    if not ok:
+        print(f"[tg] WARNING: JARVIS_PIN is weak/not set — {reason} Remote control is unsafe for a public release.")
     if _thread and _thread.is_alive():
         return True
     _thread = threading.Thread(target=_poll_loop, daemon=True, name="telegram-bot")
