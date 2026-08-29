@@ -1130,7 +1130,6 @@ class Brain:
         desc = APPROVAL_DESCRIPTIONS.get(name, lambda a: name)(args)
         req = approval_mod.create_request(name, desc, source)
         self.approval_future = req.future
-        log.info("APPROVAL: created for %s [%s]", name, source)
 
         from server import send_event
         await send_event({
@@ -1139,30 +1138,25 @@ class Brain:
             "description": desc,
             "source": source,
         })
-        log.info("APPROVAL: sent approval_request to UI for %s", name)
 
         if source == "voice":
             asyncio.create_task(self._voice_approval_flow(name, desc, req))
 
-        timeout = approval_mod.VOICE_APPROVAL_TIMEOUT if source == "voice" else 120
         try:
-            result = await asyncio.wait_for(req.future, timeout=timeout)
-            log.info("APPROVAL: resolved %s = %s", name, result)
+            result = await asyncio.wait_for(req.future, timeout=120)
             return result
         except asyncio.TimeoutError:
-            log.warning("APPROVAL: timed out for %s", name)
             req.resolve(False)
             return False
         finally:
             approval_mod.get_pending().pop(name, None)
-            # Don't clear approval_future here — let resolve_approval handle it
-            # to avoid race condition with late UI clicks
 
     async def _voice_approval_flow(self, name, desc, req):
+        # Voice flow can only APPROVE (resolve True). It never denies —
+        # denial comes from the explicit "deny" word or the UI button / 120s timeout.
         try:
             from server import speaker as spk, capture_command, send_event
             from core.approval import VOICE_APPROVAL_TIMEOUT
-            # Play chime
             try:
                 import numpy as np
                 import sounddevice as sd
@@ -1175,16 +1169,16 @@ class Brain:
             except Exception:
                 pass
 
-            # Speak the approval request
             await spk.speak(f"I need approval: {desc}. Say approve or deny.")
 
-            # Listen for voice response
-            await send_event({"type": "state", "state": "listening"})
-            audio = await asyncio.wait_for(
-                capture_command(),
-                timeout=VOICE_APPROVAL_TIMEOUT
-            )
-            await send_event({"type": "state", "state": "idle"})
+            try:
+                await send_event({"type": "state", "state": "listening"})
+                audio = await asyncio.wait_for(
+                    capture_command(),
+                    timeout=VOICE_APPROVAL_TIMEOUT
+                )
+            finally:
+                await send_event({"type": "state", "state": "idle"})
 
             if audio is not None and len(audio) > 0:
                 from core.stt import transcriber
@@ -1194,18 +1188,16 @@ class Brain:
                 if any(w in text for w in ("approve", "yes", "ok", "sure", "confirm", "go", "do it")):
                     req.resolve(True)
                     return
-                req.resolve(False)
-                return
+                deny_words = ("deny", "no", "cancel", "stop", "don't", "dont", "never")
+                if any(w in text for w in deny_words):
+                    log.info("voice approval explicitly denied: %s", text)
+                    req.resolve(False)
+                    return
+                log.info("voice approval ambiguous (%s) — leaving to UI/timeout", text)
         except asyncio.TimeoutError:
-            log.info("voice approval timed out")
-            try:
-                from server import send_event
-                await send_event({"type": "state", "state": "idle"})
-            except Exception:
-                pass
+            log.info("voice approval timed out — leaving to UI")
         except Exception as e:
             log.warning("voice approval flow error: %s", e)
-        req.resolve(False)
 
     def resolve_approval(self, approved):
         log.info("APPROVAL: resolve_approval called with approved=%s, future=%s", approved, id(self.approval_future) if self.approval_future else None)
