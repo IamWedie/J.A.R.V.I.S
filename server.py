@@ -772,6 +772,7 @@ async def startup():
     asyncio.create_task(level_broadcaster())
     asyncio.create_task(startup_greeting())
     asyncio.create_task(away_watcher())
+    asyncio.create_task(phone_reconnect_watchdog())
     netmsg.start_receiver()
 
     async def _on_reminder(msg):
@@ -886,3 +887,19 @@ async def speak_greeting(phrase):
         finally:
             await set_state("idle")
     update_wake_arm()
+
+
+PHONE_RECONNECT_INTERVAL = 90
+
+
+async def phone_reconnect_watchdog():
+    """Keep the phone reachable even when its IP/port changes. Cheap in the
+    common case (no reconnects needed) because ADB only auto-connects on
+    demand; this only reconciles the connection on a slow interval."""
+    while True:
+        await asyncio.sleep(PHONE_RECONNECT_INTERVAL)
+        try:
+            from core.net import adb_controller
+            adb_controller.connected()
+        except Exception as e:
+            log.warning(f"phone reconnect watchdog error: {e}")

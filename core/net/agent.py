@@ -5,7 +5,7 @@ import re
 import time
 
 from core.net.adb_controller import (
-    _shell, _shell_raw, _is_connected,
+    _shell, _shell_raw, _is_connected, connect_phone,
     home, back, tap, swipe, swipe_up, swipe_down,
     type_text, open_app, current_activity,
     open_camera, take_photo, take_selfie, switch_camera, toggle_flash,
@@ -179,7 +179,7 @@ def _smart_action(goal, pkg):
 
 
 async def run_agent(goal, max_steps=8):
-    if not _is_connected():
+    if not connect_phone():
         yield {"step": 0, "status": "error", "message": "Phone not connected."}
         return
 
