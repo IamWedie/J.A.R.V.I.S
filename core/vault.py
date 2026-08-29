@@ -63,7 +63,7 @@ def decrypt(encoded):
     return None
 
 
-SECRET_KEYS = {"ZEN_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "PHONE_PIN", "JARVIS_PIN"}
+SECRET_KEYS = {"ZEN_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "PHONE_PIN", "JARVIS_PIN", "LICENSE_SECRET"}
 
 
 def encrypt_env_file(env_path):

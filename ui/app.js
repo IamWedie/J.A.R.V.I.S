@@ -42,6 +42,14 @@ const I18N = {
         wake_on_label: 'WAKE: ON',
         api_key_hint_pre: 'Create one free at',
         api_key_hint_post: ', then paste it here.',
+        license_heading: 'ACTIVATE YOUR LICENSE',
+        license_hint: 'Enter the license key you received with your purchase (JARV-XXXXX-XXXXX-XXXXX-XXXXX).',
+        activate: 'ACTIVATE',
+        activating: 'Activating...',
+        license_invalid: 'That license key is not valid.',
+        license_valid: 'License activated.',
+        license_enter: 'Enter a license key first.',
+        activating_failed: 'Could not reach the license service.',
         enroll_info: 'Enroll = say 3 short phrases. After that JARVIS only obeys this voice via wake word.',
         pasted_key_first: 'Paste a key first.',
         validating: 'Validating...',
@@ -128,6 +136,14 @@ const I18N = {
         pasted_key_first: 'الصق مفتاحاً أولاً.',
         validating: 'جاري التحقق...',
         key_ok: 'مفتاح صالح - {count} نماذج متاحة.',
+        license_heading: 'تفعيل الترخيص',
+        license_hint: 'أدخل مفتاح الترخيص الذي حصلت عليه مع عملية الشراء (JARV-XXXXX-XXXXX-XXXXX-XXXXX).',
+        activate: 'تفعيل',
+        activating: 'جاري التفعيل...',
+        license_invalid: 'مفتاح الترخيص غير صالح.',
+        license_valid: 'تم تفعيل الترخيص.',
+        license_enter: 'أدخل مفتاح الترخيص أولاً.',
+        activating_failed: 'تعذر الوصول إلى خدمة الترخيص.',
         saving: 'جاري الحفظ...',
         all_systems_ready: 'جميع الأنظمة جاهزة',
         some_checks_failed: 'فشلت بعض الفحوصات — قد تواجه مشاكل',
@@ -218,16 +234,56 @@ async function maybeRunSetup() {
     try {
         const r = await fetch('/api/setup_status');
         const d = await r.json();
-        if (d.setup_needed) showWizard();
+        if (d.setup_needed || d.license_needed) showWizard(d.license_needed);
     } catch {}
 }
 
-function showWizard() {
+function showWizard(licenseNeeded) {
     wizard.classList.remove('hidden');
+    if (licenseNeeded) {
+        // license gate first, before terms
+        document.getElementById('wizStep0').classList.remove('hidden');
+        document.getElementById('licenseInput').focus();
+        return;
+    }
     fetch('/api/terms').then(r => r.json()).then(d => {
         document.getElementById('termsBox').textContent = d.text;
     });
 }
+
+document.getElementById('activateLicenseBtn').addEventListener('click', async () => {
+    const key = document.getElementById('licenseInput').value.trim();
+    const status = document.getElementById('licenseStatus');
+    const btn = document.getElementById('activateLicenseBtn');
+    if (!key) { status.textContent = t('license_enter'); return; }
+    status.className = '';
+    status.innerHTML = '<span class="spinner"></span>' + t('activating');
+    btn.disabled = true;
+    try {
+        const r = await fetch('/api/license_activate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key }),
+        });
+        const d = await r.json();
+        if (!d.ok) {
+            status.textContent = d.error || t('license_invalid');
+            btn.disabled = false;
+            return;
+        }
+        status.className = 'ok';
+        status.textContent = t('license_valid');
+        document.getElementById('wizStep0').classList.add('hidden');
+        fetch('/api/terms').then(res => res.json()).then(dt => {
+            document.getElementById('termsBox').textContent = dt.text;
+        });
+        document.getElementById('wizStep1').classList.remove('hidden');
+        document.getElementById('agreeChk').focus();
+    } catch {
+        status.textContent = t('activating_failed');
+        btn.disabled = false;
+    }
+});
 
 document.getElementById('agreeChk').addEventListener('change', e => {
     document.getElementById('agreeBtn').disabled = !e.target.checked;

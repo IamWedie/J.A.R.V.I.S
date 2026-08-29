@@ -16,6 +16,14 @@
 <div id="setupWizard" class="hidden" role="dialog" aria-label="Setup wizard">
     <div class="wizTitle" data-i18n="setup_title">J.A.R.V.I.S SETUP</div>
 
+    <div id="wizStep0" class="wizStep hidden" role="group" aria-label="Step 0: License key">
+        <div class="wizHeading" data-i18n="license_heading">ACTIVATE YOUR LICENSE</div>
+        <p class="hint" data-i18n="license_hint">Enter the license key you received with your purchase (format: JARV-XXXXX-XXXXX-XXXXX).</p>
+        <input type="text" id="licenseInput" placeholder="JARV-XXXXX-XXXXX-XXXXX-XXXXX" autocomplete="off" spellcheck="false" aria-label="License key" style="text-transform:uppercase">
+        <button id="activateLicenseBtn" class="wizBtn" data-i18n="activate">ACTIVATE</button>
+        <div id="licenseStatus" aria-live="polite"></div>
+    </div>
+
     <div id="wizStep1" class="wizStep" role="group" aria-label="Step 1: Terms of Use">
         <div class="wizHeading" data-i18n="terms_heading">1. Terms of Use</div>
         <div id="termsBox" role="document" aria-label="Terms of Use text">loading...</div>

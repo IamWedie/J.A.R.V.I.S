@@ -65,6 +65,10 @@ All settings are in `.env` (created by the setup wizard or installer):
 | `PHONE_PIN` | — | Phone unlock PIN |
 | `TELEGRAM_BOT_TOKEN` | — | Telegram bot token |
 | `TELEGRAM_CHAT_ID` | — | Your Telegram chat ID |
+| `PHONE_ADDR` | — | Phone's private VPN address (e.g. `100.x.y.z`) — JARVIS connects here only |
+| `PHONE_SERIAL` | — | Enrolled phone serial (identity whitelist) |
+| `LICENSE_SECRET` | — | Secret used to sign/verify license keys (paid distribution) |
+| `JARVIS_PIN_MIN_LENGTH` | `6` | Minimum approval PIN length |
 
 ## Privacy
 

@@ -172,7 +172,37 @@ class SetupIn(BaseModel):
 
 @app.get("/api/setup_status")
 async def api_setup_status():
-    return {"setup_needed": not bool(config.ZEN_API_KEY)}
+    from core import license as license_mod
+    license_needed = _license_gate_active() and not license_mod.is_licensed()
+    return {"setup_needed": not bool(config.ZEN_API_KEY), "license_needed": license_needed}
+
+
+def _license_gate_active():
+    """Paid license gating applies only to packaged (frozen) builds when a
+    LICENSE_SECRET is configured. Developers running from source skip it."""
+    if not config.FROZEN:
+        return False
+    return bool((getattr(config, "LICENSE_SECRET", "") or "").strip())
+
+
+class LicenseIn(BaseModel):
+    key: str
+
+
+@app.get("/api/license_status")
+async def api_license_status():
+    from core import license as license_mod
+    if not _license_gate_active():
+        return {"licensed": True, "gate": False}
+    return {"licensed": license_mod.is_licensed(), "gate": True}
+
+
+@app.post("/api/license_activate")
+async def api_license_activate(body: LicenseIn):
+    from core import license as license_mod
+    ok, reason = license_mod.activate(body.key)
+    return {"ok": ok, "error": reason if not ok else ""}
+
 
 
 @app.post("/api/setup_validate")

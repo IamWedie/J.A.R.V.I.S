@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.2.0 (2026-08-29)
+
+### Security & Paid Distribution
+- **Phone transport now VPN-only**: JARVIS connects to the phone ONLY via a configured private VPN address (`PHONE_ADDR`), never scanning the LAN. Removes wireless-debugging exposure on public networks.
+- **Serial whitelist** (`PHONE_SERIAL`): connected device must match your enrolled phone serial or it disconnects/refuses, on top of ADB crypto pairing.
+- **PIPN hardening**: strong `JARVIS_PIN` validation (min length + common-pin blocklist), per-source brute-force lockout on `/pin` (max attempts + cooldown), weak-PIN startup warning.
+- **License system** (`core/license.py`): HMAC-signed offline license keys (`JARV-XXXXX-XXXXX-XXXXX`), check-digit typo detection, activation stored in the data dir, onboarding license-step in the setup wizard.
+- **Onboarding**: license activation step added before terms/API-key in the first-run wizard.
+- TERMS.md rewritten cleanly (UTF-8 BOM) with EULA/license terms.
+
 ## 2.1.0 (2026-08-26)
 
 ### Store-Readiness Overhaul
