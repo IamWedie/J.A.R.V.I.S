@@ -6,7 +6,6 @@ import sys
 import tempfile
 import urllib.request
 import zipfile
-from datetime import datetime
 
 import core.config as config
 from core.logging_setup import get_logger

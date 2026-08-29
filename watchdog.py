@@ -5,7 +5,6 @@ import time
 import subprocess
 import urllib.request
 import json
-import traceback
 from datetime import datetime
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))

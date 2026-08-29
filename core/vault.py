@@ -3,7 +3,6 @@ import base64
 import ctypes
 import ctypes.wintypes
 import os
-import struct
 
 from core.logging_setup import get_logger
 

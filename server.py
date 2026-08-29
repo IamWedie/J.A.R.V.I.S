@@ -520,7 +520,6 @@ async def safe_wake_pipeline():
 async def level_broadcaster():
     while True:
         if clients:
-            mode_active = mic.mode == "command"
             await send_event({"type": "level", "value": round(min(mic.level * 6, 1.0), 3)})
         await asyncio.sleep(0.09)
 
