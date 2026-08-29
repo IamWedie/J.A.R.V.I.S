@@ -36,21 +36,6 @@ def _is_connected():
 
 # ──────────────────── CONNECTION ────────────────────
 
-_PHONE_HINTS = ("honor", "huawei", "samsung", "xiaomi", "redmi", "pixel", "oneplus", "oppo", "vivo", "realme", "nokia", "motorola", "android")
-_ADB_PORTS = (5555, 5556)
-
-
-def _mdns_services():
-    out = _run(["mdns", "services"])
-    services = []
-    for line in out.splitlines():
-        line = line.strip()
-        if not line or line.lower().startswith("list of"):
-            continue
-        services.append(line)
-    return services
-
-
 def _connect(host, port=5555, timeout=8):
     r = subprocess.run(
         [ADB, "connect", f"{host}:{port}"],
@@ -60,79 +45,51 @@ def _connect(host, port=5555, timeout=8):
     return "connected" in out.lower() or "already connected" in out.lower()
 
 
-def _phone_devices_from_netdiscovery():
-    """Return (host, port) candidates discovered from the network scanner."""
-    found = []
-    try:
-        from core import netdiscovery
-        for d in netdiscovery.get_devices(force=True):
-            if d.get("type") != "phone":
-                continue
-            ip = d.get("ip", "")
-            name = (d.get("name", "") + " " + d.get("vendor", "")).lower()
-            if not ip or not any(h in name for h in _PHONE_HINTS):
-                continue
-            for port in _ADB_PORTS:
-                found.append((ip, port))
-    except Exception:
-        pass
-    return found
-
-
-def _candidate_hosts():
-    """Return (host, port) candidates that are likely the *user's own* paired phone.
-
-    Security: we prefer ADB's own mDNS list, which only contains devices that have
-    (a) wireless debugging enabled AND (b) are already paired with THIS PC. Stage-2
-    netdiscovery is a last resort and is still safe because ADB will reject any
-    unpaired device — the phone itself must accept the pairing cert. We never
-    auto-pair; pairing is a human action (`adb pair <ip>:<port> <code>`).
-    """
-    candidates = []
-
-    # 1) ADB's own mDNS discovery (paired + wireless-debugging devices only).
-    for line in _mdns_services():
-        parts = line.split()
-        for p in parts:
-            if ":" not in p or p.startswith("_"):
-                continue
-            host, _, portstr = p.partition(":")
-            if not host or "." not in host:
-                continue
-            try:
-                port = int(portstr) if portstr.isdigit() else 5555
-            except Exception:
-                port = 5555
-            candidates.append((host, port))
-            break
-
-    # 2) Network-discovery fallback (ADB still rejects anything unpaired).
-    candidates.extend(_phone_devices_from_netdiscovery())
-
-    seen = set()
-    deduped = []
-    for host, port in candidates:
-        key = (host, port)
-        if key not in seen:
-            seen.add(key)
-            deduped.append(key)
-    return deduped
-
-
 def connect_phone():
-    """Ensure ADB is connected to the phone, auto-discovering its current
-    IP/port if it changed. Returns True if connected."""
+    """Ensure ADB is connected to the phone.
+
+    We connect ONLY to the configured VPN address (PHONE_ADDR) — we never scan
+    the LAN or auto-discover, so wireless debugging is never exposed to
+    strangers on public/untrusted networks. The phone joins our private overlay
+    VPN and is reached through that encrypted tunnel. ADB still requires the
+    phone to accept our pairing cert, and a PHONE_SERIAL whitelist adds a second
+    identity layer. Returns True if a verified connection is active.
+    """
+    from core import config
+
+    addr = (config.PHONE_ADDR or "").strip()
+    if not addr:
+        return False
     if _is_connected():
         return True
-    for host, port in _candidate_hosts():
-        if _connect(host, port):
-            log_connected(host, port)
+    if _connect(addr, config.PHONE_PORT):
+        if _verify_serial():
+            log_connected(addr, config.PHONE_PORT)
             return True
+        _disconnect(addr, config.PHONE_PORT)
     return False
 
 
+def _verify_serial():
+    """Confirm the connected device matches the enrolled PHONE_SERIAL, if set."""
+    from core import config
+    expected = (config.PHONE_SERIAL or "").strip()
+    if not expected:
+        return True
+    serial = _shell("getprop ro.serialno").strip()
+    return bool(serial) and serial == expected
+
+
+def _disconnect(host, port):
+    try:
+        subprocess.run([ADB, "disconnect", f"{host}:{port}"],
+                       capture_output=True, timeout=8)
+    except Exception:
+        pass
+
+
 def connected():
-    return "Phone is connected." if connect_phone() else "Phone NOT connected — enable wireless debugging and pair with this PC."
+    return "Phone is connected." if connect_phone() else "Phone NOT connected — set PHONE_ADDR (VPN address) and pair this PC with the phone."
 
 
 def log_connected(host, port):

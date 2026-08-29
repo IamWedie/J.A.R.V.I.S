@@ -62,6 +62,9 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 PHONE_PIN = os.getenv("PHONE_PIN", "").strip()
 JARVIS_PIN = os.getenv("JARVIS_PIN", "").strip()
+PHONE_ADDR = os.getenv("PHONE_ADDR", "").strip()
+PHONE_PORT = int((os.getenv("PHONE_PORT", "5555").strip() or "5555"))
+PHONE_SERIAL = os.getenv("PHONE_SERIAL", "").strip()
 LOCAL_VISION_URL = ""  # disabled until Phase D
 LOCAL_VISION_MODEL = ""  # disabled until Phase D
 
