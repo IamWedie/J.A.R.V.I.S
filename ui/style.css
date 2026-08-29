@@ -3,7 +3,7 @@
 body {
     background: radial-gradient(ellipse at 50% 30%, #0d1526 0%, #070b14 70%);
     color: #cfe9ff;
-    font-family: "Rajdhani", "Segoe UI", sans-serif;
+    font-family: "Rajdhani", "Tajawal", "Segoe UI", Tahoma, sans-serif;
     height: 100vh;
     overflow: hidden;
 }

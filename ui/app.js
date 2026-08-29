@@ -180,6 +180,7 @@ function t(key, vars) {
 
 function applyTranslations() {
     document.documentElement.lang = currentLang;
+    document.documentElement.dir = currentLang === 'ar' ? 'rtl' : 'ltr';
     if (currentLang !== 'en') {
         document.querySelectorAll('[data-i18n]').forEach(el => {
             const key = el.getAttribute('data-i18n');
