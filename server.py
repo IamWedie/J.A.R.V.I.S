@@ -174,7 +174,11 @@ class SetupIn(BaseModel):
 async def api_setup_status():
     from core import license as license_mod
     license_needed = _license_gate_active() and not license_mod.is_licensed()
-    return {"setup_needed": not bool(config.ZEN_API_KEY), "license_needed": license_needed}
+    # In packaged (frozen) builds the installer's key is only trusted once validated
+    # (ZEN_KEY_VALIDATED=1), so a bad/forged key can't bypass onboarding. Source
+    # developers trust a present key directly.
+    setup_needed = (not bool(config.ZEN_API_KEY)) or (config.FROZEN and not config.ZEN_KEY_VALIDATED)
+    return {"setup_needed": setup_needed, "license_needed": license_needed, "key_validated": config.ZEN_KEY_VALIDATED}
 
 
 def _license_gate_active():
@@ -284,9 +288,10 @@ class SetupCompleteIn(BaseModel):
 
 @app.post("/api/setup_complete")
 async def api_setup_complete(body: SetupCompleteIn):
-    config.save_settings({"ZEN_API_KEY": body.key.strip(), "ZEN_MODEL": body.model.strip()})
+    config.save_settings({"ZEN_API_KEY": body.key.strip(), "ZEN_MODEL": body.model.strip(), "ZEN_KEY_VALIDATED": "1"})
     config.ZEN_API_KEY = body.key.strip()
     config.DEFAULT_MODEL = body.model.strip()
+    config.ZEN_KEY_VALIDATED = True
     brain.reset_client()
     return {"ok": True}
 

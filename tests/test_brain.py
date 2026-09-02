@@ -35,3 +35,19 @@ def test_free_model_detection():
     from core.brain import is_free_model
     assert is_free_model("mimo-v2.5-free") is True
     assert is_free_model("gpt-4") is False
+
+
+def test_friendly_error_401():
+    from core.brain import Brain
+    b = Brain()
+    msg = b._friendly_error(Exception("Error code: 401 - Incorrect API key provided."))
+    assert "401" in msg
+    assert "opencode.ai" in msg
+    assert "setup wizard" in msg
+
+
+def test_friendly_error_ok():
+    from core.brain import Brain
+    b = Brain()
+    msg = b._friendly_error(Exception("Error code: 429 - rate limit"))
+    assert "rate limit" in msg.lower()

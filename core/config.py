@@ -46,6 +46,7 @@ def _read_version():
 VERSION = _read_version()
 
 ZEN_API_KEY = os.getenv("ZEN_API_KEY", "").strip()
+ZEN_KEY_VALIDATED = os.getenv("ZEN_KEY_VALIDATED", "").strip().lower() in ("1", "true", "yes")
 ZEN_BASE_URL = "https://opencode.ai/zen/v1"
 DEFAULT_MODEL = os.getenv("ZEN_MODEL", "").strip() or "x-preview-f-free"
 

@@ -957,13 +957,26 @@ class Brain:
     def _ensure_client(self):
         if self.client is None:
             if not config.ZEN_API_KEY:
-                raise RuntimeError("ZEN_API_KEY is not set. Add your Zen key to jarvis\\.env")
+                raise RuntimeError("You have not set a Zen API key yet. Open the JARVIS setup wizard or run `/api/setup_validate` with a key from opencode.ai/auth.")
             self.client = AsyncOpenAI(
                 base_url=config.ZEN_BASE_URL,
                 api_key=config.ZEN_API_KEY,
                 timeout=60,
             )
         return self.client
+
+    def _friendly_error(self, e):
+        s = str(e).lower()
+        if "401" in s or "invalid" in s and "api" in s or "authentication" in s or "incorrect api key" in s:
+            return ("Your Zen API key was rejected (HTTP 401). Open the setup wizard and "
+                    "enter a valid key from opencode.ai/auth.")
+        if "429" in s or "rate limit" in s:
+            return "The Zen API rate limit was hit. Wait a moment and try again."
+        if "403" in s:
+            return "Access denied (HTTP 403) by the Zen API. Your key may not have model access."
+        if isinstance(e, RuntimeError):
+            return str(e)
+        return str(e)[:300]
 
     async def _stream_round(self, messages, tools, on_chunk=None):
         client = self._ensure_client()
@@ -1029,11 +1042,14 @@ class Brain:
                     })
                 return content, calls
             return content, None
-        raise last_error
+        raise RuntimeError(self._friendly_error(last_error))
 
     async def fetch_models(self):
         client = self._ensure_client()
-        response = await client.models.list()
+        try:
+            response = await client.models.list()
+        except Exception as e:
+            raise RuntimeError(self._friendly_error(e))
         result = []
         for m in response.data:
             mid = m.id

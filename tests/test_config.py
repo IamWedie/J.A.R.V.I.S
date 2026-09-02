@@ -44,3 +44,10 @@ def test_stt_config():
 def test_save_settings():
     from core.config import save_settings, ENV_PATH
     assert callable(save_settings)
+
+
+def test_zen_key_validated_default_false():
+    import importlib
+    import core.config as config
+    importlib.reload(config)
+    assert config.ZEN_KEY_VALIDATED is False
