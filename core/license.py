@@ -1,187 +1,134 @@
-"""JARVIS License System — offline, HMAC-signed license keys for paid distribution.
+"""JARVIS License System — Ed25519-signed license keys for paid distribution.
 
-Keys look like:  JARV-XXXXX-XXXXX-XXXXX
+Keys are self-contained and verified OFFLINE using the public keyring baked
+into the app (``core/pubkeys.json``). No secret is shipped to users; the
+signing private key lives only on the minting side (the license server / mint
+tool). Key rotation is supported: any public key currently in the ring can
+verify, so issuing new keys never breaks previously-sold ones.
 
-Each key is HMAC-signed with a server secret (LICENSE_SECRET). A valid key can be
-verified entirely offline (no round-trip), while a simple online check against the
-seller platform can later confirm the key was actually sold. Activation state is
-stored under the JARVIS data dir.
+Keys look like:  JARV-XXXXX-XXXXX-...-XXXXX  (a base64url payload+signature)
 
-Security properties:
-  - Tamper: changing any character invalidates the signature.
-  - Typos: a check digit catches transcription errors before signature check.
-  - Constant-time compare avoids trivial timing side-channels.
+Activation state is stored under the JARVIS data dir (``license.lic``).
 """
-import base64
-import hashlib
-import hmac
 import os
 import time
 
-try:
-    import secrets
-    _urandom = secrets.token_bytes
-except Exception:  # pragma: no cover
-    _urandom = lambda n: os.urandom(n)
+from core import config
+from core import license_keys as lk
 
 
-PREFIX = "JARV"
-GROUP_LEN = 5
-DATA_SEGMENTS = 3          # random data segments (15 chars)
-TOTAL_SEGMENTS = DATA_SEGMENTS + 1  # +1 segment holding check digit + signature (5 chars)
-PAYLOAD_LEN = TOTAL_SEGMENTS * GROUP_LEN  # 20 chars
-_B32_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I/L
-_B32_INDEX = {c: i for i, c in enumerate(_B32_ALPHABET)}
-_CHECK_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+def generate_license(priv_pem, flags=0, expiry_days=0, key_id=None, issue_time=None):
+    """Mint a new license key. Requires the signing private key (PKCS8 PEM).
+
+    The packaged app does NOT have the private key; use this only on the
+    minting side (license server or the ``scripts/mint_key.py`` tool).
+    """
+    return lk.mint_key(priv_pem, flags=flags, expiry_days=expiry_days,
+                       key_id=key_id, issue_time=issue_time)
 
 
-def _secret():
-    from core import config
-    return (getattr(config, "LICENSE_SECRET", "") or "").encode("utf-8")
-
-
-def _normalize_key(key):
-    return "".join(ch for ch in str(key).upper() if ch.isalnum())
-
-
-def _random_segment():
-    n = len(_B32_ALPHABET) ** GROUP_LEN
-    r = int.from_bytes(_urandom(16), "big") % n
-    out = []
-    for _ in range(GROUP_LEN):
-        out.append(_B32_ALPHABET[r % len(_B32_ALPHABET)])
-        r //= len(_B32_ALPHABET)
-    return "".join(out)
-
-
-def _check_digit(payload):
-    total = 0
-    for index, ch in enumerate(payload):
-        try:
-            total += (index + 1) * (_CHECK_ALPHABET.index(ch) + 1)
-        except ValueError:
-            total += index + 1
-    return _CHECK_ALPHABET[total % len(_CHECK_ALPHABET)]
-
-
-def _hmac_digest(payload):
-    secret = _secret()
-    if not secret:
-        raise RuntimeError("LICENSE_SECRET is not configured")
-    return hmac.new(secret, payload.encode("utf-8"), hashlib.sha256).digest()
-
-
-def _short_sig(payload):
-    """4 base-32 chars derived from the HMAC, kept small inside the final segment."""
-    digest = _hmac_digest(payload)
-    return base64.b32encode(digest[:3]).decode("ascii")[:4]
-
-
-def generate_license(seed=None):
-    """Generate a new license key in the form JARV-XXXXX-XXXXX-XXXXX-XXXXX."""
-    data = "".join(_random_segment() for _ in range(DATA_SEGMENTS))
-    check = _check_digit(data)
-    sig = _short_sig(data + check)
-    last_segment = check + sig  # 1 + 4 = 5 chars
-    if len(last_segment) != GROUP_LEN:
-        last_segment = last_segment.ljust(GROUP_LEN, _B32_ALPHABET[0])
-    raw = data + last_segment  # exactly PAYLOAD_LEN chars
-    groups = [raw[i:i + GROUP_LEN] for i in range(0, len(raw), GROUP_LEN)]
-    return f"{PREFIX}-" + "-".join(groups)
-
-
-def _parse_key(key):
-    norm = _normalize_key(key)
-    if not norm.upper().startswith(PREFIX):
-        return None
-    remainder = norm.upper()[len(PREFIX):]
-    if len(remainder) != PAYLOAD_LEN:
-        return None
-    data = remainder[:DATA_SEGMENTS * GROUP_LEN]
-    check = remainder[DATA_SEGMENTS * GROUP_LEN]
-    sig = remainder[DATA_SEGMENTS * GROUP_LEN + 1:]
-    if check != _check_digit(data):
-        return None
-    return data + check, sig
+def _keyring():
+    return lk.load_keyring()
 
 
 def validate_license(key):
-    """Return True if the key is structurally valid AND its HMAC signature matches.
-
-    Requires LICENSE_SECRET to be configured (raises RuntimeError otherwise)."""
-    parsed = _parse_key(key)
-    if parsed is None:
-        return False
-    payload, sig = parsed
-    expected = _short_sig(payload)
-    return hmac.compare_digest(expected, sig)
+    """Return True if the key is structurally valid AND its Ed25519 signature
+    matches one of the embedded public keys (and is not expired)."""
+    ok, _reason, _info = lk.verify_key(key, _keyring())
+    return ok
 
 
 def validate_license_structure(key):
-    """Return True if the key has a valid format + check digit, without needing
-    the secret (useful for live validation UX before attempting full verify)."""
-    parsed = _parse_key(key)
-    return parsed is not None
+    """Return True if the key has a valid prefix/length/base64 form (no
+    signature/expiry check) — useful for live UX before full verify."""
+    try:
+        lk.parse_key(key)
+        return True
+    except Exception:
+        return False
 
 
-# ──────────────────── Activation state ────────────────────
+def key_info(key):
+    """Return parsed payload dict, or None if the key is malformed."""
+    try:
+        _payload, _sig = lk.parse_key(key)
+        return lk.parse_payload(_payload)
+    except Exception:
+        return None
+
+
+# ──────────────────── Activation state (local disk) ────────────────────
 
 def _lic_path():
-    from core import config
     return os.path.join(config.PROJECT_DIR, "license.lic")
 
 
-def _write_activated(key):
-    path = _lic_path()
+def _read_field(path, name):
+    if not os.path.exists(path):
+        return ""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.startswith(name + "="):
+                    return line.split("=", 1)[1].strip()
+    except Exception:
+        return ""
+    return ""
+
+
+def _write_activation(path, key, info):
     with open(path, "w", encoding="utf-8") as f:
         f.write(f"key={key}\n")
         f.write(f"activated={int(time.time())}\n")
+        f.write(f"flags={info.get('flags', 0)}\n")
+        f.write(f"expiry_days={info.get('expiry_days', 0)}\n")
 
 
 def activate(key):
-    """Validate and store an activated license. Returns (ok, reason)."""
+    """Validate and store an activated license. Returns (ok, reason).
+
+    Works offline: verifies the embedded signature only. (Online server
+    activation/revocation is layered on top by the caller when a server is
+    configured.)
+    """
     stripped = (key or "").strip()
     if not stripped:
         return False, "No license key entered."
     if not validate_license_structure(stripped):
         return False, "Invalid license format."
-    try:
-        if not validate_license(stripped):
-            return False, "License key is not valid."
-    except RuntimeError as e:
-        # secret unset: still allow structural-only activation for dev builds
-        return False, str(e)
-    _write_activated(stripped)
+    okay, reason, info = lk.verify_key(stripped, _keyring())
+    if not okay:
+        return False, reason or "License key is not valid."
+    _write_activation(_lic_path(), stripped, info or {})
     return True, ""
 
 
 def is_licensed():
-    """True if a valid activation is currently stored on disk."""
+    """True if a valid (structurally + signature-valid) activation is stored."""
     path = _lic_path()
-    if not os.path.exists(path):
-        return False
-    key = None
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            for line in f:
-                if line.startswith("key="):
-                    key = line.split("=", 1)[1].strip()
-    except Exception:
-        return False
+    key = _read_field(path, "key")
     if not key:
         return False
-    return validate_license_structure(key)
+    return validate_license(key)
 
 
 def current_key():
-    path = _lic_path()
-    if not os.path.exists(path):
-        return ""
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            for line in f:
-                if line.startswith("key="):
-                    return line.split("=", 1)[1].strip()
-    except Exception:
-        return ""
-    return ""
+    return _read_field(_lic_path(), "key")
+
+
+def auto_activate(server_validate=None):
+    """Try to activate from config.LICENSE_KEY if present and not yet licensed.
+
+    ``server_validate`` is an optional callable(key)->(ok, reason) used when a
+    license server is configured; if it returns not-ok, activation is refused.
+    Returns (activated, reason)."""
+    key = (getattr(config, "LICENSE_KEY", "") or "").strip()
+    if not key:
+        return False, ""
+    if is_licensed():
+        return False, "already licensed"
+    if server_validate is not None:
+        ok, reason = server_validate(key)
+        if not ok:
+            return False, reason or "server rejected key"
+    return activate(key)

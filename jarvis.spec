@@ -17,6 +17,7 @@ hiddenimports = [
     "websockets",
     "pystray._win32",
     "comtypes.stream",
+    "cryptography.hazmat.primitives.asymmetric.ed25519",
 ]
 
 import os
@@ -49,6 +50,7 @@ datas = [
     ("TERMS.md", "."),
     ("CHANGELOG.md", "."),
     ("VERSION", "."),
+    ("core/pubkeys.json", "core"),
 ]
 datas += _model_datas()
 datas += collect_data_files("openwakeword")

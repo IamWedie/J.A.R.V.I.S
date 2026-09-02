@@ -178,15 +178,61 @@ async def api_setup_status():
 
 
 def _license_gate_active():
-    """Paid license gating applies only to packaged (frozen) builds when a
-    LICENSE_SECRET is configured. Developers running from source skip it."""
+    """Paid license gating applies only to packaged (frozen) builds. Keys are
+    Ed25519-signed and verified offline with the embedded public keyring, so no
+    secret needs to be present in the app. Developers running from source skip
+    the gate."""
     if not config.FROZEN:
         return False
-    return bool((getattr(config, "LICENSE_SECRET", "") or "").strip())
+    return True
 
 
 class LicenseIn(BaseModel):
     key: str
+
+
+def _license_server_validate(key):
+    """Ask the configured license server whether this key is valid & active.
+
+    Returns (ok, error_reason). ok=False with a reason string if the server is
+    configured but rejects/errors; ok=True if no server is configured (rely on
+    offline verify only) or the server confirms validity.
+    """
+    url = config.LICENSE_SERVER_URL
+    if not url:
+        return True, ""
+    try:
+        import requests
+        resp = requests.post(
+            url + "/license/validate",
+            json={"license_key": key},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return False, "License server error (HTTP %s)." % resp.status_code
+        data = resp.json()
+        if not data.get("valid"):
+            return False, data.get("error") or "License key was rejected by the server."
+        return True, ""
+    except Exception as e:
+        return False, "Could not reach license server: %s" % (str(e)[:120])
+
+
+def _auto_activate_license():
+    """Activate from config.LICENSE_KEY (written by the installer wizard) if the
+    app isn't licensed yet. Runs online check when a license server is set."""
+    try:
+        from core import license as license_mod
+        if license_mod.is_licensed():
+            return
+        if not (getattr(config, "LICENSE_KEY", "") or "").strip():
+            return
+        activated, reason = license_mod.auto_activate(
+            server_validate=_license_server_validate if config.LICENSE_SERVER_URL else None
+        )
+        log.info("license auto-activate: activated=%s reason=%s", activated, reason)
+    except Exception as e:
+        log.warning("license auto-activate failed: %s", e)
 
 
 @app.get("/api/license_status")
@@ -201,7 +247,13 @@ async def api_license_status():
 async def api_license_activate(body: LicenseIn):
     from core import license as license_mod
     ok, reason = license_mod.activate(body.key)
-    return {"ok": ok, "error": reason if not ok else ""}
+    if not ok:
+        return {"ok": False, "error": reason}
+    # Once offline verification passes, optionally confirm online (server).
+    srv_ok, srv_err = _license_server_validate(body.key)
+    if not srv_ok:
+        return {"ok": False, "error": srv_err}
+    return {"ok": True, "error": ""}
 
 
 
@@ -791,6 +843,7 @@ async def startup():
     global main_loop
     main_loop = asyncio.get_running_loop()
     asyncio.create_task(_check_for_updates())
+    _auto_activate_license()
     mic.on_wake = _on_wake_from_audio_thread
     if config.WAKE_ENABLED_DEFAULT:
         try:

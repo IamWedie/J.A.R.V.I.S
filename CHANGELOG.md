@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.3.0 (2026-09-02)
+
+### Asymmetric License System
+- **Ed25519 signed keys** (`core/license_keys.py`): license keys now embed a 64-byte Ed25519 signature over their payload, verified **offline** by the app using only the baked-in public keyring (`core/pubkeys.json`). No signing secret ships in the app.
+- **Key rotation**: the app accepts a *ring* of active public keys, so you can rotate the signing private key without breaking previously-issued keys (`scripts/rotate_key.py`).
+- **Removed `LICENSE_SECRET`**: online/offline distribution no longer depends on a symmetric secret; `core/vault.py` no longer treats it as a secret you must ship.
+- **License server** (`license_server/`): local/self-hosted FastAPI service with `POST /license/{validate,activate,deactivate}` and `POST /admin/mint`, backed by SQLite. Enforces an activation limit per key (anti-sharing) and central revocations.
+- **Installer wizard**: now collects the Zen API key, a strong approval PIN, and the license key; writes them into `config.env`, and the app auto-activates the license on first launch (`server.py::_auto_activate_license`).
+- **Offline verification preserved**: keys are verifiable fully offline; online server check is layered on when `LICENSE_SERVER_URL` is configured.
+
 ## 2.2.0 (2026-08-29)
 
 ### Security & Paid Distribution

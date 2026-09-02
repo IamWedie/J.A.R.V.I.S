@@ -4,6 +4,10 @@ config.env
 *.env.backup
 # NOTE: .env.vault is the encrypted version — safe to commit
 
+# License signing private key + server runtime data (PUBLIC ring core/pubkeys.json IS committed)
+scripts/keys/
+license_server/*.db
+
 # Python
 __pycache__/
 *.pyc

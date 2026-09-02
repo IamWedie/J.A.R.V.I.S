@@ -67,7 +67,8 @@ All settings are in `.env` (created by the setup wizard or installer):
 | `TELEGRAM_CHAT_ID` | — | Your Telegram chat ID |
 | `PHONE_ADDR` | — | Phone's private VPN address (e.g. `100.x.y.z`) — JARVIS connects here only |
 | `PHONE_SERIAL` | — | Enrolled phone serial (identity whitelist) |
-| `LICENSE_SECRET` | — | Secret used to sign/verify license keys (paid distribution) |
+| `LICENSE_KEY` | — | License key (set by the installer wizard / onboarding) to activate JARVIS |
+| `LICENSE_SERVER_URL` | — | Optional license-server base URL for online validate/activate/revoke |
 | `JARVIS_PIN_MIN_LENGTH` | `6` | Minimum approval PIN length |
 
 ## Privacy
