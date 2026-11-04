@@ -5,8 +5,8 @@ import time
 
 import numpy as np
 import sounddevice as sd
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -17,6 +17,8 @@ from core.stt import transcriber
 from core.tts import speaker
 from core.voiceid import voiceid
 from core.net import netmsg
+from core.security.auth import ALLOWED_ORIGINS, LaunchToken
+from core.security.http import TOKEN_HEADER, inject_token_meta, security_headers
 
 from datetime import datetime
 from core.logging_setup import get_logger
@@ -26,12 +28,29 @@ log = get_logger("server")
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:8741", "http://localhost:8741"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=list(ALLOWED_ORIGINS),
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", TOKEN_HEADER],
 )
 
 UI_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
+LAUNCH_TOKEN = LaunchToken.generate()
+
+
+@app.middleware("http")
+async def enforce_token_and_headers(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/api/") and path != "/api/health":
+        if not LAUNCH_TOKEN.matches(request.headers.get(TOKEN_HEADER)):
+            response = JSONResponse({"detail": "unauthorized"}, status_code=401)
+            for name, value in security_headers().items():
+                response.headers[name] = value
+            return response
+
+    response = await call_next(request)
+    for name, value in security_headers().items():
+        response.headers[name] = value
+    return response
 
 clients = set()
 brain = Brain()
@@ -78,7 +97,11 @@ async def play_chime():
 
 @app.get("/")
 async def index():
-    return FileResponse(os.path.join(UI_DIR, "index.html"), headers=NO_CACHE)
+    with open(os.path.join(UI_DIR, "index.html"), "r", encoding="utf-8") as f:
+        html = f.read()
+    return HTMLResponse(
+        inject_token_meta(html, LAUNCH_TOKEN.value), headers={"Cache-Control": "no-store"}
+    )
 
 
 @app.get("/style.css")
@@ -137,18 +160,8 @@ def update_wake_arm():
     mic.set_armed(eligible)
 
 
-class ApprovalIn(BaseModel):
-    approved: bool
-
-
 class ModelIn(BaseModel):
     model: str
-
-
-@app.post("/api/approve")
-async def api_approve(body: ApprovalIn):
-    brain.resolve_approval(body.approved)
-    return {"ok": True}
 
 
 @app.post("/api/model")
@@ -305,6 +318,11 @@ async def api_terms():
 
 @app.get("/api/health")
 async def api_health():
+    return {"ok": True}
+
+
+@app.get("/api/status")
+async def api_status():
     online = False
     try:
         import urllib.request
@@ -845,6 +863,8 @@ async def _check_for_updates():
 
 @app.on_event("startup")
 async def startup():
+    if config.TEST_MODE:
+        return
     global main_loop
     main_loop = asyncio.get_running_loop()
     asyncio.create_task(_check_for_updates())

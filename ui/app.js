@@ -3,6 +3,13 @@ let reconnectDelay = 1000;
 let reconnectTimer = null;
 const MAX_RECONNECT = 30000;
 
+const JARVIS_TOKEN = document.querySelector('meta[name="jarvis-token"]')?.content || "";
+function apiFetch(path, options = {}) {
+    const headers = new Headers(options.headers || {});
+    headers.set("X-JARVIS-Token", JARVIS_TOKEN);
+    return fetch(path, { ...options, headers });
+}
+
 const chatlog = document.getElementById('chatlog');
 const micBtn = document.getElementById('micBtn');
 const textInput = document.getElementById('textInput');
@@ -219,7 +226,7 @@ function applyTranslations() {
 
 async function loadLang() {
     try {
-        const r = await fetch('/api/language');
+        const r = await apiFetch('/api/language');
         const d = await r.json();
         currentLang = d.current || 'en';
         document.getElementById('langSelect').value = currentLang;
@@ -232,7 +239,7 @@ let voiceEnrolled = false;
 /* === SETUP WIZARD === */
 async function maybeRunSetup() {
     try {
-        const r = await fetch('/api/setup_status');
+        const r = await apiFetch('/api/setup_status');
         const d = await r.json();
         if (d.setup_needed || d.license_needed) showWizard(d.license_needed);
     } catch {}
@@ -246,7 +253,7 @@ function showWizard(licenseNeeded) {
         document.getElementById('licenseInput').focus();
         return;
     }
-    fetch('/api/terms').then(r => r.json()).then(d => {
+    apiFetch('/api/terms').then(r => r.json()).then(d => {
         document.getElementById('termsBox').textContent = d.text;
     });
 }
@@ -260,7 +267,7 @@ document.getElementById('activateLicenseBtn').addEventListener('click', async ()
     status.innerHTML = '<span class="spinner"></span>' + t('activating');
     btn.disabled = true;
     try {
-        const r = await fetch('/api/license_activate', {
+        const r = await apiFetch('/api/license_activate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ key }),
@@ -274,7 +281,7 @@ document.getElementById('activateLicenseBtn').addEventListener('click', async ()
         status.className = 'ok';
         status.textContent = t('license_valid');
         document.getElementById('wizStep0').classList.add('hidden');
-        fetch('/api/terms').then(res => res.json()).then(dt => {
+        apiFetch('/api/terms').then(res => res.json()).then(dt => {
             document.getElementById('termsBox').textContent = dt.text;
         });
         document.getElementById('wizStep1').classList.remove('hidden');
@@ -303,7 +310,7 @@ document.getElementById('validateKeyBtn').addEventListener('click', async () => 
     status.className = '';
     status.innerHTML = '<span class="spinner"></span>' + t('validating');
     btn.disabled = true;
-    const r = await fetch('/api/setup_validate', {
+    const r = await apiFetch('/api/setup_validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key }),
@@ -333,7 +340,7 @@ document.getElementById('validateKeyBtn').addEventListener('click', async () => 
 async function runSystemCheck() {
     const ids = { microphone: 'checkMic', speaker: 'checkSpeaker', internet: 'checkInternet', stt_model: 'checkSTT' };
     try {
-        const r = await fetch('/api/system_check');
+        const r = await apiFetch('/api/system_check');
         const d = await r.json();
         let allOk = true;
         for (const [key, elId] of Object.entries(ids)) {
@@ -369,7 +376,7 @@ document.getElementById('saveModelBtn').addEventListener('click', async () => {
     const btn = document.getElementById('saveModelBtn');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>' + t('saving');
-    await fetch('/api/setup_complete', {
+    await apiFetch('/api/setup_complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: validatedKey, model }),
@@ -581,7 +588,7 @@ document.getElementById('btnDeny').addEventListener('click', () => {
 /* === MODELS === */
 async function loadModels() {
     try {
-        const res = await fetch('/api/models');
+        const res = await apiFetch('/api/models');
         const data = await res.json();
         if (!data.models || !data.models.length) return;
         modelSelect.innerHTML = '';
@@ -623,7 +630,7 @@ document.getElementById('wipeMemoryBtn').addEventListener('click', () => {
 
 async function loadMemoryStats() {
     try {
-        const res = await fetch('/api/memory_stats');
+        const res = await apiFetch('/api/memory_stats');
         const d = await res.json();
         document.getElementById('memStats').textContent =
             t('memory_remembered', { conversations: d.conversations, facts: d.facts });
@@ -671,7 +678,7 @@ document.getElementById('updateBtn').addEventListener('click', () => {
 });
 async function loadVersion() {
     try {
-        const r = await fetch('/api/health');
+        const r = await apiFetch('/api/status');
         const d = await r.json();
         document.getElementById('versionLabel').textContent = 'v' + (d.version || '?');
     } catch {}
@@ -696,7 +703,7 @@ loadLang();
 const offlineBanner = document.getElementById('offlineBanner');
 async function checkHealth() {
     try {
-        const r = await fetch('/api/health');
+        const r = await apiFetch('/api/status');
         const d = await r.json();
         offlineBanner.classList.toggle('hidden', d.online);
     } catch {
