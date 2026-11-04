@@ -4,6 +4,7 @@ import sys
 from dotenv import load_dotenv
 
 FROZEN = getattr(sys, "frozen", False)
+TEST_MODE = os.getenv("JARVIS_TEST_MODE") == "1"
 
 
 def data_dir():

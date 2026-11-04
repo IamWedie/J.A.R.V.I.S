@@ -1,5 +1,12 @@
 """Shared pytest fixtures. Resets approval/PIN lockout state between tests so
 module-level state doesn't leak across test functions."""
+import os
+import tempfile
+
+os.environ.setdefault("JARVIS_DATA_DIR", tempfile.mkdtemp(prefix="jarvis-tests-"))
+os.environ.setdefault("JARVIS_TEST_MODE", "1")
+os.environ.setdefault("JARVIS_DEV", "1")
+
 import pytest
 
 
