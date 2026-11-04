@@ -1,5 +1,3 @@
-import time
-
 from core.security.auth import (
     ALLOWED_ORIGINS, LaunchToken, SessionManager, origin_allowed,
 )
@@ -26,9 +24,11 @@ def test_origin_allows_only_local_ui():
 
 def test_activate_revokes_previous_session():
     manager = SessionManager()
-    first = manager.activate(manager.create(object()))
-    second = manager.activate(manager.create(object()))
-    assert first is not None
+    first = manager.create(object())
+    assert manager.activate(first) is None
+    second = manager.create(object())
+    replaced = manager.activate(second)
+    assert replaced is first
     assert first.revoked_at is not None
     assert first.active is False
     assert second.active is True
@@ -37,7 +37,8 @@ def test_activate_revokes_previous_session():
 
 def test_closed_session_is_not_active():
     manager = SessionManager()
-    session = manager.activate(manager.create(object()))
+    session = manager.create(object())
+    manager.activate(session)
     manager.close(session.session_id)
     assert manager.get_active() is None
     assert manager.is_active(session.session_id) is False

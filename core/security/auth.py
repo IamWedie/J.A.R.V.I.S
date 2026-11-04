@@ -67,16 +67,18 @@ class SessionManager:
         self._sessions[session.session_id] = session
         return session
 
-    def activate(self, session: Session) -> Session:
+    def activate(self, session: Session) -> Session | None:
         known = self._sessions.get(session.session_id)
         if known is None:
             raise LookupError(f"unknown session: {session.session_id}")
         previous = self._active
-        if previous is not None and previous is not known:
+        if previous is None or previous is known:
+            previous = None
+        else:
             previous.revoked_at = self._clock()
         known.revoked_at = None
         self._active = known
-        return known
+        return previous
 
     def get_active(self) -> Session | None:
         return self._active
