@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 @dataclass(frozen=True)
 class Features:
@@ -13,7 +13,11 @@ class Features:
     auto_update: bool = False
 
     def enabled(self, name: str) -> bool:
-        return bool(getattr(self, name, False))
+        if name not in _FEATURE_NAMES:
+            return False
+        return bool(getattr(self, name))
 
+
+_FEATURE_NAMES = frozenset(f.name for f in fields(Features))
 
 DEFAULT_FEATURES = Features()
