@@ -2,9 +2,11 @@
 
 Every row is linked to its predecessor via ``prev_hash`` and carries
 ``entry_hash = SHA-256(prev_hash || canonical_event_json)`` plus an
-``HMAC-SHA256(key, entry_hash)`` tag, so edits to hashed fields are
-detectable without the key (``result_status`` is mutable by design; see
-``COLUMNS``).
+``HMAC-SHA256(key, entry_hash)`` tag, so edits to any hashed field
+(every column except ``entry_hash``/``hmac`` themselves) are detectable
+without the key.  Legitimate in-place mutations
+(``reconcile_incomplete``) re-hash the mutated row and re-stamp every
+later row inside the same transaction (see ``_restamp_from``).
 """
 from __future__ import annotations
 
@@ -70,19 +72,18 @@ ALL_COLUMNS: tuple[str, ...] = (
     "hmac",
 )
 
-#: Fields authenticated by ``entry_hash``.  ``result_status`` is deliberately
-#: excluded: ``reconcile_incomplete`` updates it on an already-written row, and
-#: re-hashing that row would invalidate every link after it.
-COLUMNS: tuple[str, ...] = tuple(
-    c for c in ALL_COLUMNS if c not in {"result_status", "entry_hash", "hmac"}
-)
+#: Fields authenticated by ``entry_hash`` (everything except the hash and MAC
+#: columns themselves).  ``result_status`` is included: when
+#: ``reconcile_incomplete`` updates it on an already-written row it re-hashes
+#: that row and re-stamps every later row in the same transaction.
+COLUMNS: tuple[str, ...] = tuple(c for c in ALL_COLUMNS if c not in {"entry_hash", "hmac"})
 
 ZERO_ANCHOR = "0" * 64
 _REDACTED = "[REDACTED]"
 _VALUE_LIMIT = 120
-_SECRET_KEY_RE = re.compile(
-    r"api_key|token|secret|password|pin|license_key", re.IGNORECASE
-)
+#: Matched against *normalized* keys (casefolded, non-alphanumerics stripped),
+#: so ``api_key``/``apikey``/``api-key`` and ``licenseKey`` are all caught.
+_SECRET_KEY_RE = re.compile(r"apikey|token|secret|password|pin|licensekey")
 
 # Process-wide writer lock: serializes writes (and reads of the shared
 # connection) across every AuditLog instance in this process.
@@ -122,22 +123,37 @@ def hash_args(args: dict) -> str:
     return hashlib.sha256(canonical_json(args)).hexdigest()
 
 
+def _normalize_key(key) -> str:
+    """Casefold *key* and drop every character outside ``[0-9a-z]``."""
+    return re.sub(r"[^0-9a-z]", "", str(key).casefold())
+
+
+def _redact(value):
+    """Recursively redact secret-looking keys and truncate strings."""
+    if isinstance(value, dict):
+        cleaned = {}
+        for key, item in value.items():
+            if _SECRET_KEY_RE.search(_normalize_key(key)):
+                cleaned[key] = _REDACTED
+            else:
+                cleaned[key] = _redact(item)
+        return cleaned
+    if isinstance(value, (list, tuple)):
+        return [_redact(item) for item in value]
+    if isinstance(value, str):
+        return value[:_VALUE_LIMIT]
+    return value
+
+
 def redact_args(args: dict) -> str:
     """Canonical JSON of *args* with secret-looking values replaced.
 
-    Keys matching ``api_key|token|secret|password|pin|license_key``
-    (case-insensitive) become ``[REDACTED]``; every other string value is
-    truncated to 120 characters.
+    Walks nested dicts and lists.  A key whose normalized form matches
+    ``apikey|token|secret|password|pin|licensekey`` has its whole value
+    replaced with ``[REDACTED]``; every other string value (nested ones
+    included) is truncated to 120 characters.
     """
-    cleaned = {}
-    for key, value in args.items():
-        if _SECRET_KEY_RE.search(str(key)):
-            cleaned[key] = _REDACTED
-        elif isinstance(value, str):
-            cleaned[key] = value[:_VALUE_LIMIT]
-        else:
-            cleaned[key] = value
-    return canonical_json(cleaned).decode("utf-8")
+    return canonical_json(_redact(args)).decode("utf-8")
 
 
 def _entry_hash(event: dict) -> str:
@@ -196,9 +212,14 @@ class AuditLog:
         error_code=None,
     ) -> int:
         """Append one event inside a ``BEGIN IMMEDIATE`` transaction; return its id."""
-        args_hash = hash_args(args) if args is not None else None
-        if args_redacted is None and args is not None:
-            args_redacted = redact_args(args)
+        if not event_type or event_type not in EVENT_TYPES:
+            raise ValueError(f"unknown audit event type: {event_type!r}")
+        # Hash the REDACTED form: raw args (e.g. a 4-digit PIN) are
+        # brute-forceable from an unsalted SHA-256.
+        redacted = _redact(args) if args is not None else None
+        args_hash = hash_args(redacted) if redacted is not None else None
+        if args_redacted is None and redacted is not None:
+            args_redacted = canonical_json(redacted).decode("utf-8")
         caps = (
             canonical_json(list(capabilities)).decode("utf-8") if capabilities else None
         )
@@ -251,19 +272,25 @@ class AuditLog:
                     " AND x.id > r.id)"
                 ).fetchall()
                 count = 0
-                for row in pending:
-                    conn.execute(
-                        "UPDATE audit SET result_status = 'unknown' WHERE id = ?",
-                        (row["id"],),
-                    )
-                    self._insert(
-                        "tool.error",
-                        prev_hash=self._tip_or_anchor(),
-                        tool=row["tool"],
-                        request_id=row["request_id"],
-                        error_code="unknown_result",
-                    )
-                    count += 1
+                if pending:
+                    for row in pending:
+                        conn.execute(
+                            "UPDATE audit SET result_status = 'unknown' WHERE id = ?",
+                            (row["id"],),
+                        )
+                    # ``result_status`` is authenticated: re-hash the mutated
+                    # rows and re-stamp every later row so the chain stays
+                    # verifiable.
+                    self._restamp_from(min(row["id"] for row in pending))
+                    for row in pending:
+                        self._insert(
+                            "tool.error",
+                            prev_hash=self._tip_or_anchor(),
+                            tool=row["tool"],
+                            request_id=row["request_id"],
+                            error_code="unknown_result",
+                        )
+                        count += 1
                 conn.execute("COMMIT")
             except BaseException:
                 conn.execute("ROLLBACK")
@@ -277,14 +304,19 @@ class AuditLog:
         is appended after the file is written and is therefore not in it).
         """
         with _LOCK:
+            rows = self._conn.execute(
+                "SELECT * FROM audit ORDER BY id ASC"
+            ).fetchall()
+        # File I/O happens outside the lock; the snapshot is already
+        # materialised in memory.
+        events = [{column: row[column] for column in ALL_COLUMNS} for row in rows]
+        with open(path, "w", encoding="utf-8", newline="\n") as handle:
+            for event in events:
+                handle.write(canonical_json(event).decode("utf-8"))
+                handle.write("\n")
+        count = len(events)
+        with _LOCK:
             conn = self._conn
-            rows = conn.execute("SELECT * FROM audit ORDER BY id ASC").fetchall()
-            with open(path, "w", encoding="utf-8", newline="\n") as handle:
-                for row in rows:
-                    event = {column: row[column] for column in ALL_COLUMNS}
-                    handle.write(canonical_json(event).decode("utf-8"))
-                    handle.write("\n")
-            count = len(rows)
             conn.execute("BEGIN IMMEDIATE")
             try:
                 self._insert("audit.export", prev_hash=self._tip_or_anchor())
@@ -298,8 +330,10 @@ class AuditLog:
         """Delete rows older than the retention cutoff and log the new anchor.
 
         The last deleted row's ``entry_hash`` becomes the ``chain_anchor`` in
-        ``audit_meta``; one ``audit.pruned`` event is appended with that anchor
-        as its ``prev_hash``.  Returns the number of deleted rows.
+        ``audit_meta``; one ``audit.pruned`` event is appended with the
+        surviving tip as its ``prev_hash`` (the stored anchor when nothing
+        survives), so both a partial and a full prune leave the chain
+        verifiable.  Returns the number of deleted rows.
         """
         ts_now = time.time() if now is None else now
         cutoff = ts_now - self._retention_days * 86400.0
@@ -318,8 +352,13 @@ class AuditLog:
                         "UPDATE audit_meta SET value = ? WHERE key = 'chain_anchor'",
                         (new_anchor,),
                     )
+                    # Survivors chain from the tip; after a full prune the
+                    # table is empty and _tip_or_anchor() yields the anchor
+                    # we just stored — both keep verify_chain() green.
                     self._insert(
-                        "audit.pruned", prev_hash=new_anchor, ts=ts_now
+                        "audit.pruned",
+                        prev_hash=self._tip_or_anchor(),
+                        ts=ts_now,
                     )
                 conn.execute("COMMIT")
             except BaseException:
@@ -402,7 +441,7 @@ class AuditLog:
             "args_redacted": args_redacted,
             "decision": decision,
             "approver": approver,
-            # result_status is stored but not authenticated: see COLUMNS.
+            "result_status": result_status,
             "error_code": error_code,
             "prev_hash": prev_hash,
         }
@@ -444,6 +483,38 @@ class AuditLog:
         if row is not None:
             return row["entry_hash"]
         return self._meta("chain_anchor") or ZERO_ANCHOR
+
+    def _restamp_from(self, start_id: int) -> None:
+        """Re-hash row *start_id* and re-link every later row after an in-place
+        mutation (e.g. ``result_status``).  Caller holds _LOCK + transaction."""
+        conn = self._conn
+        prev = conn.execute(
+            "SELECT entry_hash FROM audit WHERE id < ? ORDER BY id DESC LIMIT 1",
+            (start_id,),
+        ).fetchone()
+        running = (
+            prev["entry_hash"]
+            if prev is not None
+            else (self._meta("chain_anchor") or ZERO_ANCHOR)
+        )
+        rows = conn.execute(
+            "SELECT * FROM audit WHERE id >= ? ORDER BY id ASC", (start_id,)
+        ).fetchall()
+        for row in rows:
+            event = {column: row[column] for column in COLUMNS}
+            event["prev_hash"] = running
+            entry_hash = _entry_hash(event)
+            conn.execute(
+                "UPDATE audit SET prev_hash = ?, entry_hash = ?, hmac = ?"
+                " WHERE id = ?",
+                (
+                    running,
+                    entry_hash,
+                    _hmac_digest(self._key, entry_hash),
+                    row["id"],
+                ),
+            )
+            running = entry_hash
 
     def _meta(self, key: str):
         row = self._conn.execute(

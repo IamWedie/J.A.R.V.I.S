@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 
@@ -97,4 +98,52 @@ def test_recent_returns_newest_last(tmp_path):
     assert [row["event_type"] for row in log.recent(2)] == [
         "auth.success", "auth.failure",
     ]
+    log.close()
+
+def test_partial_prune_keeps_chain_verifiable(tmp_path):
+    log = AuditLog(tmp_path / "audit.db", KEY, retention_days=0)
+    for i in range(3):
+        log.append("auth.success", session_id=f"s{i}")
+    rows = log.recent(3)
+    # Cutoff inside the log: the first row is deleted, the last two survive.
+    removed = log.prune(now=rows[1]["ts"])
+    assert removed == 1
+    survivors = [
+        row["session_id"] for row in log.recent(10) if row["session_id"]
+    ]
+    assert survivors == ["s1", "s2"]
+    assert log.verify_chain() is True
+    log.close()
+
+def test_nested_secret_keys_are_redacted():
+    args = {"auth": {"token": "x"}, "apiKey": "y", "opts": [{"password": "z"}]}
+    redacted = redact_args(args)
+    # Quoted so a key that merely contains the letter (e.g. "apiKey")
+    # can't satisfy the assertion — the VALUES must not survive.
+    assert '"x"' not in redacted
+    assert '"y"' not in redacted
+    assert '"z"' not in redacted
+    parsed = json.loads(redacted)
+    assert parsed["auth"]["token"] == "[REDACTED]"
+    assert parsed["apiKey"] == "[REDACTED]"
+    assert parsed["opts"][0]["password"] == "[REDACTED]"
+
+def test_results_hash_is_of_redacted_args(tmp_path):
+    log = make_log(tmp_path)
+    args = {"pin": "4821", "text": "hello"}
+    log.append("tool.request", tool="get_volume", args=args)
+    stored = log.recent(1)[0]["args_hash"]
+    redacted = json.loads(redact_args(args))
+    assert stored == hash_args(redacted)
+    assert stored != hash_args(args)
+    log.close()
+
+def test_append_rejects_unknown_event_type(tmp_path):
+    log = make_log(tmp_path)
+    with pytest.raises(ValueError):
+        log.append("not.a.real.event")
+    with pytest.raises(ValueError):
+        log.append("")
+    assert log.recent(5) == []
+    assert log.verify_chain() is True
     log.close()
