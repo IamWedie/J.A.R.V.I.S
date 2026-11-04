@@ -4,6 +4,10 @@ let reconnectTimer = null;
 const MAX_RECONNECT = 30000;
 
 const JARVIS_TOKEN = document.querySelector('meta[name="jarvis-token"]')?.content || "";
+let WSAUTHED = false;
+let wsSessionId = null;
+let authRejected = false;
+const pendingSends = [];
 function apiFetch(path, options = {}) {
     const headers = new Headers(options.headers || {});
     headers.set("X-JARVIS-Token", JARVIS_TOKEN);
@@ -100,6 +104,9 @@ const I18N = {
         memory_remembered: '{conversations} messages remembered | {facts} facts',
         test: 'Testing voice...',
         confirm_wipe: 'Erase ALL memories and conversations permanently?',
+        auth_failed: 'Authentication failed - access denied.',
+        session_replaced: 'This window was replaced by another JARVIS window.',
+        session_inactive: 'Session is no longer active.',
     },
     ar: {
         setup_title: 'إعداد جارفيس',
@@ -190,6 +197,9 @@ const I18N = {
         memory_remembered: '{conversations} رسائل | {facts} حقائق',
         test: 'جاري اختبار الصوت...',
         confirm_wipe: 'مسح جميع الذكريات والمحادثات نهائياً؟',
+        auth_failed: 'فشلت المصادقة - تم رفض الوصول.',
+        session_replaced: 'استُبدل هذا النافذة بنافذة جارفيس أخرى.',
+        session_inactive: 'الجلسة لم تعد فعّالة.',
     },
 };
 
@@ -439,10 +449,23 @@ function connect() {
     ws = new WebSocket(`ws://${location.host}/ws`);
     ws.onopen = () => {
         reconnectDelay = 1000;
-        document.getElementById('status').textContent = t('online');
+        WSAUTHED = false;
+        authRejected = false;
+        pendingSends.length = 0;
+        ws.send(JSON.stringify({ cmd: 'auth', token: JARVIS_TOKEN }));
     };
     ws.onmessage = onMessage;
-    ws.onclose = () => {
+    ws.onclose = (e) => {
+        WSAUTHED = false;
+        if (e && e.code === 4001) {
+            document.getElementById('status').textContent = t('session_replaced');
+            showToast(t('session_replaced'), 'warning', 10000);
+            return;
+        }
+        if (authRejected) {
+            document.getElementById('status').textContent = t('auth_failed');
+            return;
+        }
         document.getElementById('status').textContent = t('reconnecting');
         reconnectTimer = setTimeout(connect, reconnectDelay);
         reconnectDelay = Math.min(reconnectDelay * 1.5, MAX_RECONNECT);
@@ -455,6 +478,27 @@ function onMessage(ev) {
     try { msg = JSON.parse(ev.data); } catch { return; }
 
     switch (msg.type) {
+        case 'auth_ok':
+            WSAUTHED = true;
+            wsSessionId = msg.session_id;
+            document.getElementById('status').textContent = t('online');
+            while (pendingSends.length) {
+                const queued = pendingSends.shift();
+                if (ws && ws.readyState === 1) ws.send(JSON.stringify(queued));
+            }
+            break;
+        case 'auth_error':
+            WSAUTHED = false;
+            if (!authRejected) showToast(t('auth_failed'), 'error', 8000);
+            authRejected = true;
+            break;
+        case 'session_revoked':
+            WSAUTHED = false;
+            break;
+        case 'session_inactive':
+            WSAUTHED = false;
+            showToast(t('session_inactive'), 'warning');
+            break;
         case 'state':
             setState(msg.value);
             micBtn.classList.toggle('listening', msg.value === 'listening');
@@ -550,7 +594,10 @@ function updateWakeBtn(on) {
     wakeBtn.classList.toggle('on', on);
 }
 
-function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+function send(obj) {
+    if (!WSAUTHED) { pendingSends.push(obj); return; }
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+}
 
 function addMsg(text, who) {
     const div = document.createElement('div');

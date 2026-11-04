@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from starlette.websockets import WebSocketState
 
 import core.config as config
 from core.brain import Brain, FRIENDLY_NAMES, is_free_model
@@ -17,7 +18,7 @@ from core.stt import transcriber
 from core.tts import speaker
 from core.voiceid import voiceid
 from core.net import netmsg
-from core.security.auth import ALLOWED_ORIGINS, LaunchToken
+from core.security.auth import ALLOWED_ORIGINS, LaunchToken, Session, SessionManager, origin_allowed
 from core.security.http import TOKEN_HEADER, inject_token_meta, security_headers
 
 from datetime import datetime
@@ -35,6 +36,10 @@ app.add_middleware(
 
 UI_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
 LAUNCH_TOKEN = LaunchToken.generate()
+SESSIONS = SessionManager()
+REPLACEMENT_GRACE_SECONDS = 0.5
+MAX_AUTH_ATTEMPTS = 3
+AUTH_ATTEMPT_TIMEOUT_SECONDS = 5.0
 
 
 @app.middleware("http")
@@ -52,7 +57,6 @@ async def enforce_token_and_headers(request: Request, call_next):
         response.headers[name] = value
     return response
 
-clients = set()
 brain = Brain()
 processing_lock = asyncio.Lock()
 current_state = "idle"
@@ -131,15 +135,14 @@ async def favicon():
 
 
 async def send_event(event):
-    dead = []
-    data = json.dumps(event)
-    for ws in list(clients):
-        try:
-            await ws.send_text(data)
-        except Exception:
-            dead.append(ws)
-    for ws in dead:
-        clients.discard(ws)
+    """Deliver an event to the single active control session; drop it otherwise."""
+    active = SESSIONS.get_active()
+    if active is None:
+        return
+    try:
+        await active.websocket.send_text(json.dumps(event))
+    except Exception:
+        pass
 
 
 async def set_state(value):
@@ -624,15 +627,86 @@ async def safe_wake_pipeline():
 
 async def level_broadcaster():
     while True:
-        if clients:
+        if SESSIONS.get_active() is not None:
             await send_event({"type": "level", "value": round(min(mic.level * 6, 1.0), 3)})
         await asyncio.sleep(0.09)
 
 
-@app.websocket("/ws")
-async def websocket_endpoint(ws: WebSocket):
-    await ws.accept()
-    clients.add(ws)
+_auth_failure_log_at = 0.0
+AUTH_FAILURE_LOG_INTERVAL = 10.0
+
+
+def _log_ws_auth_failure(reason: str, origin: str) -> None:
+    """Amortized auth-failure logging: at most one line per interval.
+
+    Only our own reason code and a printable, truncated Origin header are
+    written. The supplied token and the raw frame never reach the log."""
+    global _auth_failure_log_at
+    now = time.monotonic()
+    if now - _auth_failure_log_at < AUTH_FAILURE_LOG_INTERVAL:
+        return
+    _auth_failure_log_at = now
+    safe_origin = "".join(ch for ch in origin if ch.isprintable())[:120]
+    log.warning("ws auth rejected (reason=%s, origin=%s)", reason, safe_origin)
+
+
+async def _ws_handshake(ws: WebSocket) -> Session | None:
+    """Authenticate a fresh connection and open its single control session.
+
+    Returns the active session on success, or None when the caller must stop
+    (the socket is already closed with 1008 for a bad origin or a failed
+    handshake). The token value is never logged or echoed back."""
+    origin_header = ws.headers.get("origin", "")
+    if not origin_allowed(origin_header):
+        _log_ws_auth_failure("origin", origin_header)
+        await ws.close(code=1008)
+        return None
+
+    for _ in range(MAX_AUTH_ATTEMPTS):
+        msg = None
+        try:
+            raw = await asyncio.wait_for(
+                ws.receive_text(), timeout=AUTH_ATTEMPT_TIMEOUT_SECONDS
+            )
+            msg = json.loads(raw)
+        except (asyncio.TimeoutError, json.JSONDecodeError):
+            msg = None
+        if (
+            isinstance(msg, dict)
+            and msg.get("cmd") == "auth"
+            and LAUNCH_TOKEN.matches(str(msg.get("token", "")))
+        ):
+            session = SESSIONS.create(ws)
+            try:
+                previous = SESSIONS.activate(session)
+                if previous is not None and previous is not session:
+                    try:
+                        await previous.websocket.send_text(
+                            json.dumps({"type": "session_revoked"})
+                        )
+                    except Exception:
+                        pass
+                    await asyncio.sleep(REPLACEMENT_GRACE_SECONDS)
+                    try:
+                        await previous.websocket.close(code=4001)
+                    except Exception:
+                        pass
+                await ws.send_text(json.dumps({
+                    "type": "auth_ok",
+                    "session_id": session.session_id,
+                    "protocol": 1,
+                }))
+            except BaseException:
+                SESSIONS.close(session.session_id)
+                raise
+            return session
+        _log_ws_auth_failure("credentials", origin_header)
+        await ws.send_text(json.dumps({"type": "auth_error"}))
+    await ws.close(code=1008)
+    return None
+
+
+async def _ws_send_initial(ws: WebSocket) -> None:
     await ws.send_text(json.dumps({"type": "state", "value": current_state}))
     await ws.send_text(json.dumps({"type": "wake", "enabled": mic.wake_enabled}))
     await ws.send_text(json.dumps({"type": "voice_status", "enrolled": voiceid.enrolled}))
@@ -645,12 +719,28 @@ async def websocket_endpoint(ws: WebSocket):
             }))
     except Exception as e:
         log.warning(f"history send failed: {e}")
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(ws: WebSocket):
+    await ws.accept()
+    session = None
     try:
+        session = await _ws_handshake(ws)
+        if session is None:
+            return
+        await _ws_send_initial(ws)
         while True:
             raw = await ws.receive_text()
+            if not SESSIONS.is_active(session.session_id):
+                await ws.send_text(json.dumps({"type": "session_inactive"}))
+                await ws.close(code=1008)
+                return
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:
+                continue
+            if not isinstance(msg, dict):
                 continue
 
             cmd = msg.get("cmd")
@@ -748,7 +838,13 @@ async def websocket_endpoint(ws: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
-        clients.discard(ws)
+        if session is not None:
+            SESSIONS.close(session.session_id)
+        if ws.application_state == WebSocketState.CONNECTED:
+            try:
+                await ws.close()
+            except Exception:
+                pass
 
 
 async def safe_voice_pipeline():
