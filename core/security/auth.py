@@ -27,7 +27,10 @@ class LaunchToken:
     def matches(self, candidate: str | None) -> bool:
         if not candidate:
             return False
-        return secrets.compare_digest(self.value, candidate)
+        try:
+            return secrets.compare_digest(self.value, candidate)
+        except TypeError:
+            return False
 
 
 def origin_allowed(
@@ -71,12 +74,13 @@ class SessionManager:
         known = self._sessions.get(session.session_id)
         if known is None:
             raise LookupError(f"unknown session: {session.session_id}")
+        if known is self._active:
+            return None
+        if known.revoked_at is not None:
+            raise ValueError(f"session already revoked: {session.session_id}")
         previous = self._active
-        if previous is None or previous is known:
-            previous = None
-        else:
-            previous.revoked_at = self._clock()
-        known.revoked_at = None
+        if previous is not None:
+            self._revoke(previous)
         self._active = known
         return previous
 
@@ -94,6 +98,9 @@ class SessionManager:
         session = self._sessions.get(session_id)
         if session is None:
             return
+        self._revoke(session)
+
+    def _revoke(self, session: Session) -> None:
         if session.revoked_at is None:
             session.revoked_at = self._clock()
         if self._active is session:
