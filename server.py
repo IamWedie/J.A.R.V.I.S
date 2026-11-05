@@ -19,6 +19,7 @@ from core.tts import speaker
 from core.voiceid import voiceid
 from core.net import netmsg
 from core.security.auth import ALLOWED_ORIGINS, LaunchToken, Session, SessionManager, origin_allowed
+from core.security.commands import CommandRouter
 from core.security.http import TOKEN_HEADER, inject_token_meta, security_headers
 
 from datetime import datetime
@@ -721,6 +722,118 @@ async def _ws_send_initial(ws: WebSocket) -> None:
         log.warning(f"history send failed: {e}")
 
 
+def _safe_cmd(value) -> str:
+    """Printable, truncated rendering of an untrusted ``cmd`` value for logs."""
+    text = value if isinstance(value, str) else type(value).__name__
+    return "".join(ch for ch in text if ch.isprintable())[:64]
+
+
+class ServerActions:
+    """``CommandActions`` backed by the server's existing command logic.
+
+    Each method receives the raw command message; field extraction is the
+    same as the previous inline if/elif chain.
+    """
+
+    async def start_listen(self, msg):
+        if current_state == "listening" and mic.mode == "command":
+            mic.request_stop()
+        else:
+            asyncio.create_task(safe_voice_pipeline())
+
+    async def abort(self, msg):
+        mic.end_command_capture()
+        speaker.stop()
+
+    async def chat(self, msg):
+        text = (msg.get("text") or "").strip()
+        if text:
+            asyncio.create_task(text_flow(text))
+
+    async def set_model(self, msg):
+        brain.model = msg.get("model") or brain.model
+
+    async def reset(self, msg):
+        brain.reset_history()
+        await send_event({"type": "cleared"})
+
+    async def wake_toggle(self, msg):
+        try:
+            enabled = bool(msg.get("enabled"))
+            if enabled:
+                mic.enable_wake()
+            else:
+                mic.disable_wake()
+            update_wake_arm()
+            config.save_settings({"WAKE_ENABLED": "1" if enabled else "0"})
+            await send_event({"type": "wake", "enabled": mic.wake_enabled})
+        except Exception as e:
+            log.warning(f"wake toggle failed: {e}", exc_info=True)
+            await send_event({"type": "error", "message": f"Wake toggle failed: {e}"} )
+
+    async def tts_settings(self, msg):
+        try:
+            voice = msg.get("voice") or config.TTS_VOICE
+            rate = msg.get("rate") or config.TTS_RATE
+            config.TTS_VOICE = voice
+            config.TTS_RATE = rate
+            speaker.rate = None
+            config.save_settings({"TTS_VOICE": voice, "TTS_RATE": rate})
+            await send_event({"type": "tts_saved", "voice": voice, "rate": rate})
+        except Exception as e:
+            await send_event({"type": "error", "message": f"Voice settings failed: {e}"})
+
+    async def tts_test(self, msg):
+        asyncio.create_task(test_voice())
+
+    async def enroll(self, msg):
+        asyncio.create_task(safe_enroll_flow())
+
+    async def voice_reset(self, msg):
+        voiceid.reset()
+        await send_event({"type": "voice_status", "enrolled": False})
+
+    async def wipe_memory(self, msg):
+        try:
+            from core import memory
+            memory.wipe_memory()
+            brain.reset_history()
+            await send_event({"type": "cleared"})
+            await send_event({"type": "memory_wiped"})
+        except Exception as e:
+            await send_event({"type": "error", "message": f"Wipe failed: {e}"})
+
+    async def set_language(self, msg):
+        lang = msg.get("lang", "en")
+        from core.i18n import set_language
+        set_language(lang)
+        config.save_settings({"UI_LANG": lang})
+        await send_event({"type": "language_changed", "lang": lang})
+
+    async def unknown(self, msg):
+        log.info("WS: unknown command ignored: %s", _safe_cmd(msg.get("cmd")))
+
+
+class _DenyApprovalPort:
+    """Placeholder ``ApprovalPort``; Task 12 wires the real approval manager."""
+
+    def resolve(self, session_id: str, request_id: str, decision: str) -> bool:
+        log.info(
+            "WS: approval response dropped, no approval manager yet "
+            "(session=%s, request=%s, decision=%s)",
+            session_id,
+            request_id,
+            decision,
+        )
+        return False
+
+
+#: Non-tool command routing. ``audit`` stays ``None`` until Task 18's runtime
+#: builds ``SECURITY.audit``: commands with ``requires_audit`` then fail closed
+#: with ``audit_unavailable`` while chat/listen/abort keep working.
+COMMAND_ROUTER = CommandRouter(None, _DenyApprovalPort(), ServerActions())
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
@@ -743,98 +856,20 @@ async def websocket_endpoint(ws: WebSocket):
             if not isinstance(msg, dict):
                 continue
 
-            cmd = msg.get("cmd")
-            if cmd == "listen":
-                if current_state == "listening" and mic.mode == "command":
-                    mic.request_stop()
-                else:
-                    asyncio.create_task(safe_voice_pipeline())
-            elif cmd == "abort":
-                mic.end_command_capture()
-                speaker.stop()
-            elif cmd == "chat":
-                text = (msg.get("text") or "").strip()
-                if text:
-                    asyncio.create_task(text_flow(text))
-            elif cmd == "approval":
-                log.info("WS: approval command received: %s", msg.get("approved"))
-                brain.resolve_approval(bool(msg.get("approved")))
-            elif cmd == "model":
-                brain.model = msg.get("model") or brain.model
-            elif cmd == "reset":
-                brain.reset_history()
-                await send_event({"type": "cleared"})
-            elif cmd == "wake_toggle":
+            result = await COMMAND_ROUTER.handle(session, msg)
+            if not result.ok:
+                log.info(
+                    "WS: command rejected (cmd=%s, code=%s)",
+                    _safe_cmd(msg.get("cmd")),
+                    result.error_code,
+                )
                 try:
-                    enabled = bool(msg.get("enabled"))
-                    if enabled:
-                        mic.enable_wake()
-                    else:
-                        mic.disable_wake()
-                    update_wake_arm()
-                    config.save_settings({"WAKE_ENABLED": "1" if enabled else "0"})
-                    await send_event({"type": "wake", "enabled": mic.wake_enabled})
-                except Exception as e:
-                    log.warning(f"wake toggle failed: {e}", exc_info=True)
-                    await send_event({"type": "error", "message": f"Wake toggle failed: {e}"} )
-            elif cmd == "tts_settings":
-                try:
-                    voice = msg.get("voice") or config.TTS_VOICE
-                    rate = msg.get("rate") or config.TTS_RATE
-                    config.TTS_VOICE = voice
-                    config.TTS_RATE = rate
-                    speaker.rate = None
-                    config.save_settings({"TTS_VOICE": voice, "TTS_RATE": rate})
-                    await send_event({"type": "tts_saved", "voice": voice, "rate": rate})
-                except Exception as e:
-                    await send_event({"type": "error", "message": f"Voice settings failed: {e}"})
-            elif cmd == "tts_test":
-                asyncio.create_task(test_voice())
-            elif cmd == "enroll":
-                asyncio.create_task(safe_enroll_flow())
-            elif cmd == "voice_reset":
-                voiceid.reset()
-                await send_event({"type": "voice_status", "enrolled": False})
-            elif cmd == "wipe_memory":
-                try:
-                    from core import memory
-                    memory.wipe_memory()
-                    brain.reset_history()
-                    await send_event({"type": "cleared"})
-                    await send_event({"type": "memory_wiped"})
-                except Exception as e:
-                    await send_event({"type": "error", "message": f"Wipe failed: {e}"})
-            elif cmd == "update_download":
-                async def _do_update():
-                    from core.updater import check_for_update, download_update, apply_zip_update
-                    await send_event({"type": "update_progress", "status": "checking"})
-                    info = await asyncio.to_thread(check_for_update)
-                    if not info:
-                        await send_event({"type": "error", "message": "No update available"})
-                        return
-                    await send_event({"type": "update_progress", "status": "downloading"})
-                    path = await asyncio.to_thread(download_update, info)
-                    if not path:
-                        await send_event({"type": "error", "message": "Download failed"})
-                        return
-                    if info.get("download_url", "").endswith(".zip"):
-                        ok = await asyncio.to_thread(apply_zip_update, info)
-                    else:
-                        from core.updater import install_update
-                        ok = await asyncio.to_thread(install_update, path)
-                    if ok:
-                        await send_event({"type": "update_progress", "status": "ready"})
-                        speaker.stop()
-                        await speaker.speak("Update downloaded. JARVIS will restart to apply it.")
-                    else:
-                        await send_event({"type": "error", "message": "Install failed"})
-                asyncio.create_task(_do_update())
-            elif cmd == "set_language":
-                lang = msg.get("lang", "en")
-                from core.i18n import set_language
-                set_language(lang)
-                config.save_settings({"UI_LANG": lang})
-                await send_event({"type": "language_changed", "lang": lang})
+                    await ws.send_text(json.dumps({
+                        "type": "error",
+                        "message": result.message or result.error_code or "command rejected",
+                    }))
+                except Exception:
+                    pass
     except WebSocketDisconnect:
         pass
     finally:
