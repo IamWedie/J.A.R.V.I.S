@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import os
 import tempfile
 import time
@@ -123,7 +124,10 @@ def _effective_risk(spec) -> tuple[str, str | None]:
         cap = capability_risk(getattr(spec, "capabilities", None))
     except Exception:  # ScopeError, TypeError on malformed input
         cap = None
-    if cap is None:
+    # Both sides must be known risk keys; an unexpected capability_risk
+    # result fails closed instead of raising KeyError in RISK_ORDER[...].
+    cap_ok = isinstance(cap, str) and cap in RISK_ORDER
+    if not cap_ok:
         return (declared if declared_ok else "", "unknown_capability")
     if not declared_ok:
         return (cap, "unknown_capability")
@@ -213,22 +217,34 @@ def _search_files(spec, args) -> tuple[Decision, str]:
     """Built-in decision for ``search_files`` (guarded, scoped)."""
     kind_info = _scope_kind(spec)
     arg = kind_info[1] if (kind_info and kind_info[0] == "filesystem") else "location"
+    roots = getattr(spec, "filesystem_roots", None)
+    if isinstance(roots, (str, bytes)) or not roots:
+        roots = ()  # malformed or empty: there is no manifest root set
     value = args.get(arg)
     if value is None:
-        return (Decision.ALLOW, "scoped_allow")  # missing -> all manifest roots
+        # Missing -> "all manifest roots"; with no roots that is a search
+        # over nothing, which must never become an unrestricted ALLOW.
+        if not roots:
+            return (Decision.ASK, "no_roots")
+        return (Decision.ALLOW, "scoped_allow")
     if isinstance(value, str):
         text = value.strip()
         if text == "" or text.lower() == "all":
+            if not roots:
+                return (Decision.ASK, "no_roots")
             return (Decision.ALLOW, "scoped_allow")
         alias = text.lower()
         if alias in _LOCATION_ALIASES:
-            for root in spec.filesystem_roots:
+            if not roots:
+                return (Decision.ASK, "no_roots")
+            for root in roots:
                 base = os.path.basename(os.path.normpath(os.path.expanduser(root)))
                 if base.casefold() == alias:
                     return (Decision.ALLOW, "scoped_allow")
+            # Alias names a location but no manifest root matches it.
             return (Decision.ASK, "scoped_outside")
     try:
-        resolve_within_roots(value, spec.filesystem_roots)
+        resolve_within_roots(value, roots)
     except (ScopeError, TypeError, ValueError):
         return (Decision.ASK, "scoped_outside")
     return (Decision.ALLOW, "scoped_allow")
@@ -427,7 +443,11 @@ class PolicyEngine:
     def evaluate(self, spec, args, features) -> PolicyDecision:
         """Apply the decision order; first terminal rule wins.
 
-        Never raises for malformed arguments: deny/ask fail closed.
+        Never raises for malformed arguments or helper failures: deny/ask
+        fail closed (guarded -> ``ASK`` ``policy_error`` with
+        ``can_grant=False``, anything else -> ``DENY``).  Policy load
+        errors are raised at construction, not here, and are re-raised
+        rather than swallowed.
         """
         risk, error = _effective_risk(spec)
         if self._status == "corrupt":
@@ -444,7 +464,12 @@ class PolicyEngine:
         if override == "deny":
             return PolicyDecision(Decision.DENY, "user_deny", risk)
         if override == "ask":
-            scope = _requested_scope(spec, args) if risk == "guarded" else None
+            try:
+                scope = _requested_scope(spec, args) if risk == "guarded" else None
+            except PolicyIntegrityError:
+                raise
+            except Exception:
+                scope = None  # helper failure: never widen, can_grant stays False
             return PolicyDecision(
                 Decision.ASK,
                 "user_ask",
@@ -454,16 +479,31 @@ class PolicyEngine:
             )
         # Built-in decision (step 6), then matching grants (step 7).
         # User ``allow`` (step 8) never widens: it changes nothing here.
-        decision, reason = _builtin(spec, args, risk)
-        if decision is Decision.ASK and risk == "guarded":
-            scope = _requested_scope(spec, args)
-            if scope is None:
-                return PolicyDecision(Decision.ASK, reason, risk)
-            kind, requested = scope
-            if self._match_grant(spec, kind, requested):
-                return PolicyDecision(Decision.ALLOW, "grant", risk)
-            return PolicyDecision(Decision.ASK, reason, risk, requested, True)
-        return PolicyDecision(decision, reason, risk)
+        # Helper calls (inspect_url, resolve_app/app_allowed, expanduser/
+        # normpath, grant matching) must never propagate an unexpected
+        # exception: guarded tools fail closed to ASK, everything else
+        # fails closed to DENY.
+        try:
+            decision, reason = _builtin(spec, args, risk)
+            if decision is Decision.ASK and risk == "guarded":
+                if reason == "no_roots":
+                    return PolicyDecision(Decision.ASK, reason, risk, None, False)
+                scope = _requested_scope(spec, args)
+                if scope is None:
+                    return PolicyDecision(Decision.ASK, reason, risk)
+                kind, requested = scope
+                if self._match_grant(spec, kind, requested):
+                    return PolicyDecision(Decision.ALLOW, "grant", risk)
+                return PolicyDecision(Decision.ASK, reason, risk, requested, True)
+            return PolicyDecision(decision, reason, risk)
+        except PolicyIntegrityError:
+            raise  # raised by load/mutations only; never swallowed here
+        except Exception:
+            if risk == "guarded":
+                return PolicyDecision(
+                    Decision.ASK, "policy_error", risk, None, False
+                )
+            return PolicyDecision(Decision.DENY, "policy_error", risk)
 
     def _match_grant(self, spec, kind: str, requested: str) -> bool:
         """True when an unexpired manifest-bounded grant covers *requested*."""
@@ -500,12 +540,17 @@ class PolicyEngine:
             raise ValueError("grants require a guarded tool")
         if not isinstance(source, str) or not source:
             raise ValueError("grant source must be a non-empty string")
-        if (
-            isinstance(ttl_days, bool)
-            or not isinstance(ttl_days, (int, float))
-            or ttl_days <= 0
-        ):
-            raise ValueError("grant ttl_days must be > 0")
+        # ttl_days must be a real, positive, finite number: bool, NaN,
+        # +/-inf and non-numeric types would otherwise mint a grant that
+        # never expires (or an immediate one).
+        if isinstance(ttl_days, bool) or not isinstance(ttl_days, (int, float)):
+            raise ValueError("invalid_ttl")
+        try:
+            ttl = float(ttl_days)
+        except OverflowError:  # absurdly large int
+            raise ValueError("invalid_ttl") from None
+        if not math.isfinite(ttl) or ttl <= 0:
+            raise ValueError("invalid_ttl")
         kind_info = _scope_kind(spec)
         if kind_info is None:
             raise ScopeError("unscoped_tool")
@@ -517,7 +562,12 @@ class PolicyEngine:
                 scope, spec.egress_allowlist
             ):
                 raise ScopeError("domain_not_allowlisted")
-            stored = _norm_host(scope)
+            try:
+                # Store the canonical form: IDNA ASCII, lowercase, with the
+                # trailing root dot removed, so matching compares equal hosts.
+                stored = scope.encode("idna").decode("ascii").lower().rstrip(".")
+            except (UnicodeError, ValueError):
+                raise ValueError("invalid_domain") from None
         else:
             resolved = resolve_app(scope if isinstance(scope, str) else str(scope))
             if resolved is None or not app_allowed(resolved, spec.app_allowlist):
@@ -529,7 +579,7 @@ class PolicyEngine:
             tool=spec.name,
             scope=stored,
             created_at=now,
-            expires_at=now + float(ttl_days) * 86400.0,
+            expires_at=now + ttl * 86400.0,
             source=source,
         )
         self._grants.append(grant)

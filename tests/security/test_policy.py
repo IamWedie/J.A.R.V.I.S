@@ -9,14 +9,24 @@ import pytest
 
 from core.security.audit import AuditLog
 from core.security.canonical import canonical_json
-from core.security.features import DEFAULT_FEATURES
+from core.security.features import DEFAULT_FEATURES, Features
 from core.security.manifest import ToolSpec
 from core.security.policy import Decision, PolicyEngine, PolicyIntegrityError
 
 KEY = b"0123456789abcdef0123456789abcdef"
 
 
-def _spec(name, *, risk="safe", caps=(), roots=(), egress=(), apps=(), arg_scopes=None):
+def _spec(
+    name,
+    *,
+    risk="safe",
+    caps=(),
+    roots=(),
+    egress=(),
+    apps=(),
+    arg_scopes=None,
+    feature=None,
+):
     """Build a ToolSpec directly with the given name/caps/risk/scopes."""
     return ToolSpec(
         name=name,
@@ -35,6 +45,7 @@ def _spec(name, *, risk="safe", caps=(), roots=(), egress=(), apps=(), arg_scope
         egress_allowlist=tuple(egress),
         app_allowlist=tuple(apps),
         argument_scopes={} if arg_scopes is None else arg_scopes,
+        feature=feature,
     )
 
 
@@ -78,6 +89,13 @@ def test_default_guarded_tools_are_allowed(tmp_path):
     decision = engine.evaluate(web, {}, DEFAULT_FEATURES)
     assert decision.decision is Decision.ALLOW
     assert decision.reason == "fixed_endpoint"
+    # Defense in depth: a disabled feature denies before the built-in rule.
+    disabled = _spec(
+        "web_search", risk="guarded", egress=("example.com",), feature="web_search"
+    )
+    decision = engine.evaluate(disabled, {}, Features(web_search=False))
+    assert decision.decision is Decision.DENY
+    assert decision.reason == "feature_disabled"
 
 
 def test_scoped_guarded_tool_is_allowed_inside_scope(tmp_path):
@@ -98,6 +116,17 @@ def test_scoped_guarded_tool_asks_outside_scope(tmp_path):
     engine = PolicyEngine(tmp_path / "policy.json", KEY)
     decision = engine.evaluate(spec, {"location": str(tmp_path / "elsewhere")}, DEFAULT_FEATURES)
     assert decision.decision is Decision.ASK
+    assert decision.can_grant is False
+    # No manifest roots at all: "all" must not become an unrestricted search.
+    no_roots = _spec("search_files", risk="guarded", roots=())
+    decision = engine.evaluate(no_roots, {"location": "all"}, DEFAULT_FEATURES)
+    assert decision.decision is Decision.ASK
+    assert decision.reason == "no_roots"
+    assert decision.grant_scope is None
+    assert decision.can_grant is False
+    decision = engine.evaluate(no_roots, {}, DEFAULT_FEATURES)
+    assert decision.decision is Decision.ASK
+    assert decision.reason == "no_roots"
     assert decision.can_grant is False
 
 
@@ -123,6 +152,14 @@ def test_user_deny_override_narrows(tmp_path):
     decision = engine.evaluate(_spec("set_volume", risk="guarded"), {}, DEFAULT_FEATURES)
     assert decision.decision is Decision.DENY
     assert decision.reason == "user_deny"
+    # An explicit "ask" override also narrows: a normally-ALLOW guarded
+    # tool stays ASK and cannot be widened back to ALLOW.
+    ask_engine = _engine(tmp_path, overrides={"set_volume": "ask"})
+    decision = ask_engine.evaluate(
+        _spec("set_volume", risk="guarded"), {}, DEFAULT_FEATURES
+    )
+    assert decision.decision is Decision.ASK
+    assert decision.reason == "user_ask"
 
 
 def test_user_allow_cannot_widen_manifest_scope(tmp_path):
@@ -139,13 +176,24 @@ def test_user_allow_cannot_widen_manifest_scope(tmp_path):
 
 
 def test_sensitive_tool_cannot_be_granted(tmp_path):
-    spec = _spec("get_clipboard", risk="sensitive", caps=("clipboard.read",))
+    # Scoped sensitive spec: the refusal below comes from the sensitive
+    # risk check, not from a missing/unrecognized scope kind.
+    spec = _spec(
+        "delete_file",
+        risk="sensitive",
+        caps=("filesystem.delete",),
+        roots=(str(tmp_path),),
+        arg_scopes={"filesystem": ["path"]},
+    )
     engine = PolicyEngine(tmp_path / "policy.json", KEY)
     with pytest.raises((ValueError, PolicyIntegrityError)):
-        engine.add_grant(spec, "anything", "ui")
+        engine.add_grant(spec, str(tmp_path / "x.txt"), "ui")
     assert engine.list_grants() == []
-    decision = engine.evaluate(spec, {}, DEFAULT_FEATURES)
+    decision = engine.evaluate(
+        spec, {"path": str(tmp_path / "x.txt")}, DEFAULT_FEATURES
+    )
     assert decision.decision is Decision.ASK
+    assert decision.reason == "sensitive"
 
 
 def test_grant_expiry_and_revocation(tmp_path):
@@ -168,6 +216,12 @@ def test_grant_expiry_and_revocation(tmp_path):
     assert decision.decision is Decision.ASK
     assert decision.can_grant is True
     assert decision.grant_scope is not None
+    # Non-finite TTLs are rejected before any grant can be created.
+    with pytest.raises(ValueError):
+        engine.add_grant(spec, str(target), "ui", ttl_days=float("inf"))
+    with pytest.raises(ValueError):
+        engine.add_grant(spec, str(target), "ui", ttl_days=float("nan"))
+    assert engine.list_grants() == []
     # Grant lifts ASK to ALLOW while unexpired.
     grant_id = engine.add_grant(spec, str(target), "ui", ttl_days=1)
     decision = engine.evaluate(spec, args, DEFAULT_FEATURES)
