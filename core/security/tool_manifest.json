@@ -83,7 +83,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Launch an installed application by name from the Start Menu.",
@@ -115,7 +115,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Set the system output volume to a percentage level.",
@@ -147,7 +147,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Read the current system output volume as a percentage.",
@@ -172,7 +172,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Send a media playback key (play/pause, next, previous, stop, mute).",
@@ -202,7 +202,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Report CPU, RAM, battery, and disk usage.",
@@ -227,7 +227,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Rank running processes by memory or CPU usage.",
@@ -261,7 +261,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "List the names of running user applications.",
@@ -419,7 +419,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Search home folders for files matching a pattern.",
@@ -467,7 +467,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Read the current system clipboard text.",
@@ -493,7 +493,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Replace the system clipboard text.",
@@ -526,7 +526,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Minimize all open windows to show the desktop.",
@@ -551,7 +551,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Bring the first window matching a title to the foreground.",
@@ -584,7 +584,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Type text into the active window by clipboard paste.",
@@ -622,7 +622,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Open an allowlisted URL in the default web browser.",
@@ -676,7 +676,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Capture the screen and save it as a PNG file.",
@@ -703,7 +703,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Extract visible text from the screen with OCR.",
@@ -731,7 +731,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Describe the active window and visible screen text.",
@@ -888,7 +888,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Terminate a running application by executable name.",
@@ -925,7 +925,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Delete a file or folder within the home directories.",
@@ -965,7 +965,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Lock the Windows session.",
@@ -990,7 +990,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Put the PC to sleep.",
@@ -1015,7 +1015,7 @@
       "code_files": [
         {
           "path": "core/tools/pc_tools.py",
-          "sha256": "5b6f4f19f1e7d23fce39bae98fa9d8cb6a4a5639bf6bff7ff520f6f1d6b6674b"
+          "sha256": "ae151baf8b6ee394cbbcea42682e5a07feb4508620bc4b95066170c9bee7df17"
         }
       ],
       "description": "Shut down, restart, cancel, hibernate, or sleep the PC.",

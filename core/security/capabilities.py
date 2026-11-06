@@ -7,6 +7,8 @@ manifest is loaded.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 #: Risk severity order, lowest first.
 RISK_ORDER: dict[str, int] = {
     "safe": 0,
@@ -48,3 +50,30 @@ CAPABILITY_MIN_RISK: dict[str, str] = {
 
 #: The exact set of known capability names (27).
 CAPABILITIES: frozenset[str] = frozenset(CAPABILITY_MIN_RISK)
+
+
+class ScopeError(ValueError):
+    """A value fell outside the scope the manifest allows for an operation.
+
+    Raised by the canonical scope matchers (``resolve_within_roots``,
+    ``capability_risk``) with a short token message that never echoes the
+    rejected value.
+    """
+
+
+def capability_risk(capabilities: Sequence[str]) -> str:
+    """Return the highest minimum risk across *capabilities*.
+
+    An empty sequence is ``"safe"``.  Any capability name missing from
+    ``CAPABILITY_MIN_RISK`` is unknown and rejected with
+    ``ScopeError("unknown_capability:<name>")``.
+    """
+    if not capabilities:
+        return "safe"
+    for name in capabilities:
+        if not isinstance(name, str) or name not in CAPABILITY_MIN_RISK:
+            raise ScopeError(f"unknown_capability:{name}")
+    return max(
+        (CAPABILITY_MIN_RISK[name] for name in capabilities),
+        key=RISK_ORDER.__getitem__,
+    )
