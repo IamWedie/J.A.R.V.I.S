@@ -217,10 +217,14 @@ class ApprovalManager:
         if entry is None:
             # Unknown, already resolved, cancelled, or expired: no new row.
             return ApprovalDecision.DENY
+        # After the lookup only the STORED request counts: a caller-supplied
+        # ApprovalRequest with the same id but forged expires_at/tool/
+        # session_id must not influence TTL, audit fields, or removal.
+        stored = entry.request
         future = entry.future
-        remaining = max(0.0, request.expires_at - self._clock())
+        remaining = max(0.0, stored.expires_at - self._clock())
         if remaining == 0.0:
-            self._expire(request.request_id)
+            self._expire(stored.request_id)
             return ApprovalDecision.DENY
         try:
             # shield: the timeout cancels only the wrapper, never the
@@ -229,16 +233,20 @@ class ApprovalManager:
                 asyncio.shield(future), timeout=remaining
             )
         except asyncio.TimeoutError:
-            if not self._expire(request.request_id) and future.done():
+            if not self._expire(stored.request_id) and future.done():
                 # Already gone: a resolve/cancel raced the timeout and won.
                 return future.result()
             return ApprovalDecision.DENY
         except asyncio.CancelledError:
             # Shutdown path: never leave a dangling approval behind.
-            self._pending.pop(request.request_id, None)
-            if not future.done():
-                future.set_result(ApprovalDecision.DENY)
-            self._audit_cancelled(request, "waiter_cancelled")
+            # Only remove if we still own the entry; a concurrent
+            # resolve/cancel that already removed it wins and must not
+            # produce a second cancelled row.
+            removed = self._pending.pop(stored.request_id, None)
+            if removed is not None:
+                if not future.done():
+                    future.set_result(ApprovalDecision.DENY)
+                self._audit_cancelled(stored, "waiter_cancelled")
             raise
         return decision
 

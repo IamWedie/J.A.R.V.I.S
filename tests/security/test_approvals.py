@@ -13,7 +13,7 @@ waiter tasks reach their first suspension -- not a timed sleep.
 import asyncio
 import json
 import time
-from dataclasses import FrozenInstanceError, fields
+from dataclasses import FrozenInstanceError, fields, replace
 
 import pytest
 from starlette.websockets import WebSocketDisconnect
@@ -59,6 +59,19 @@ def make_request(manager, session_id="s1", **overrides):
 
 def audit_rows(log, event_type):
     return [row for row in log.recent(50) if row["event_type"] == event_type]
+
+
+class FlakyAudit:
+    """Delegates to a real AuditLog, optionally failing one event type."""
+
+    def __init__(self, real):
+        self.real = real
+        self.fail_on = None
+
+    def append(self, event_type, **kwargs):
+        if event_type == self.fail_on:
+            raise RuntimeError("audit down")
+        return self.real.append(event_type, **kwargs)
 
 
 @pytest.mark.asyncio
@@ -153,6 +166,17 @@ async def test_cross_session_is_rejected(audit, manager):
     assert await waiter == ApprovalDecision.ALLOW
     assert manager.pending_for("s1") == []
 
+    # -- stored-TTL guarantee -------------------------------------------
+    # wait must read expires_at from the STORED request; a forged past
+    # expires_at on the caller object must not expire the waiter.
+    third = make_request(manager, session_id="s1")
+    forged = replace(third, expires_at=0.0, tool="forged")
+    forged_waiter = asyncio.create_task(manager.wait(forged))
+    await asyncio.sleep(0)
+    assert not forged_waiter.done()  # trusted forged 0.0 -> would be done
+    assert manager.resolve("s1", third.request_id, "allow") is True
+    assert await forged_waiter == ApprovalDecision.ALLOW
+
 
 @pytest.mark.asyncio
 async def test_expired_request_denies(audit):
@@ -165,7 +189,13 @@ async def test_expired_request_denies(audit):
         ApprovalManager(None)
 
     first = make_request(manager)
+    first_future = manager._pending[first.request_id].future
     assert await manager.wait(first) == ApprovalDecision.DENY
+    # asyncio.shield pins: wait_for's timeout must not cancel the shared
+    # future the decider would still set.
+    assert first_future.done()
+    assert not first_future.cancelled()
+    assert first_future.result() is ApprovalDecision.DENY
     expired = audit_rows(audit, "approval.expired")
     assert [row["request_id"] for row in expired] == [first.request_id]
     assert expired[0]["decision"] is None
@@ -185,6 +215,15 @@ async def test_expired_request_denies(audit):
     # waiting on an already-expired request denies without another audit row
     assert await manager.wait(second) == ApprovalDecision.DENY
     assert len(audit_rows(audit, "approval.expired")) == 2
+
+    # a failing approval.expired write is best effort: wait still denies
+    # and must not raise out of the timeout path.
+    flaky = FlakyAudit(audit)
+    flaky.fail_on = "approval.expired"
+    flaky_manager = ApprovalManager(flaky, ttl=0.01)
+    third = make_request(flaky_manager)
+    assert await flaky_manager.wait(third) == ApprovalDecision.DENY
+    assert flaky_manager.pending_for("s1") == []
 
 
 @pytest.mark.asyncio
@@ -220,6 +259,30 @@ async def test_disconnect_cancels_pending(audit, manager):
     assert manager.cancel_session("s9", "x" * 200) == 0
     assert manager.cancel_all() == 0
     assert len(audit_rows(audit, "approval.cancelled")) == 3
+
+    # a failing approval.cancelled write never blocks the deny: the
+    # request is still removed and cancel_session does not raise.
+    flaky = FlakyAudit(audit)
+    flaky.fail_on = "approval.cancelled"
+    flaky_manager = ApprovalManager(flaky)
+    doomed = make_request(flaky_manager, session_id="s3")
+    assert flaky_manager.cancel_session("s3") == 1
+    assert flaky_manager.pending_for("s3") == []
+
+    # a forged request object with the same id must not leak into the
+    # cancelled audit row: the STORED request's tool is audited.
+    fifth = make_request(manager, session_id="s1")
+    forged = replace(fifth, tool="forged")
+    stale_waiter = asyncio.create_task(manager.wait(forged))
+    await asyncio.sleep(0)
+    stale_waiter.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await stale_waiter
+    cancelled = audit_rows(audit, "approval.cancelled")
+    assert cancelled[-1]["tool"] == "read_file"  # stored, not "forged"
+    assert cancelled[-1]["request_id"] == fifth.request_id
+    assert cancelled[-1]["error_code"] == "waiter_cancelled"
+    assert manager.pending_for("s1") == []
 
 
 @pytest.mark.asyncio
@@ -318,6 +381,32 @@ async def test_request_and_resolution_are_audited(audit, manager):
     assert resolved[0]["approver"] == "ui"
     assert resolved[0]["decision"] == "allow"
     assert resolved[0]["request_id"] == request.request_id
+    assert audit.verify_chain() is True
+
+    # -- fail-closed audit guarantee ------------------------------------
+    # an audit outage must never leave an unaudited pending request or
+    # an unaudited grant behind; the caller retries after recovery.
+    flaky = FlakyAudit(audit)
+    flaky_manager = ApprovalManager(flaky)
+
+    flaky.fail_on = "approval.requested"
+    with pytest.raises(ApprovalError, match="audit_unavailable"):
+        make_request(flaky_manager)
+    assert flaky_manager.pending_for("s1") == []
+
+    flaky.fail_on = None
+    retry = make_request(flaky_manager)
+    retry_waiter = asyncio.create_task(flaky_manager.wait(retry))
+    await asyncio.sleep(0)
+
+    flaky.fail_on = "approval.resolved"
+    assert flaky_manager.resolve("s1", retry.request_id, "allow") is False
+    assert flaky_manager.pending_for("s1") == [retry]  # still pending
+    assert not retry_waiter.done()  # nothing granted unaudited
+
+    flaky.fail_on = None
+    assert flaky_manager.resolve("s1", retry.request_id, "allow") is True
+    assert await retry_waiter == ApprovalDecision.ALLOW
     assert audit.verify_chain() is True
 
 
