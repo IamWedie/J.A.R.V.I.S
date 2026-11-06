@@ -56,6 +56,21 @@ def test_dotdot_is_rejected(tmp_path):
     assert str(excinfo.value) == "dotdot"
     # The exception never echoes the raw path.
     assert str(tmp_path) not in str(excinfo.value)
+    # NTFS ADS streams and trailing dot/space components are rejected
+    # before resolution.  ``Path`` may normalize some forms, so both the
+    # joined form and the literal string are exercised.
+    root = tmp_path
+    for raw in (
+        str(root / "...\\secret"),
+        str(root / ".. \\secret"),
+        str(root / "file.txt:stream"),
+        str(root) + "\\...\\secret",
+        str(root) + "\\.. \\secret",
+        str(root) + "\\file.txt:stream",
+    ):
+        with pytest.raises(ScopeError) as excinfo:
+            resolve_within_roots(raw, [str(root)])
+        assert str(root) not in str(excinfo.value)
 
 
 def test_unc_and_device_paths_are_rejected():
@@ -295,6 +310,13 @@ def test_capability_risk_is_the_maximum():
     with pytest.raises(ScopeError) as excinfo:
         capability_risk(["system.read", "not.a.capability"])
     assert str(excinfo.value) == "unknown_capability:not.a.capability"
+    # Malformed input fails closed instead of aggregating to "safe".
+    with pytest.raises(ScopeError) as excinfo:
+        capability_risk(None)
+    assert str(excinfo.value) == "unknown_capability:None"
+    with pytest.raises(ScopeError) as excinfo:
+        capability_risk("system.read")
+    assert str(excinfo.value) == "invalid_capabilities"
     # Both import paths name the very same exception class.
     from core.security.scopes import ScopeError as ReExportedScopeError
 

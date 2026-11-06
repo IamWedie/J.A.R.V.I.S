@@ -66,8 +66,15 @@ def capability_risk(capabilities: Sequence[str]) -> str:
 
     An empty sequence is ``"safe"``.  Any capability name missing from
     ``CAPABILITY_MIN_RISK`` is unknown and rejected with
-    ``ScopeError("unknown_capability:<name>")``.
+    ``ScopeError("unknown_capability:<name>")``.  Malformed input fails
+    closed: ``None`` raises ``ScopeError("unknown_capability:None")`` and
+    a bare ``str``/``bytes`` raises ``ScopeError("invalid_capabilities")``
+    rather than being iterated character by character.
     """
+    if capabilities is None:
+        raise ScopeError("unknown_capability:None")
+    if isinstance(capabilities, (str, bytes, bytearray)):
+        raise ScopeError("invalid_capabilities")
     if not capabilities:
         return "safe"
     for name in capabilities:

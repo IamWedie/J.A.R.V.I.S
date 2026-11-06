@@ -93,8 +93,9 @@ def resolve_within_roots(raw: str, roots: Sequence[str]) -> Path:
 
     Rejections raise :class:`ScopeError` with a short token message that
     never echoes the raw path: ``empty_path``, ``unc_path``,
-    ``drive_relative``, ``dotdot``, ``short_name``, ``path_outside_roots``,
-    ``reparse_point``, ``no_roots``.
+    ``drive_relative``, ``dotdot``, ``short_name``, ``ads_stream``,
+    ``invalid_component``, ``path_outside_roots``, ``reparse_point``,
+    ``no_roots``.
     """
     if not isinstance(raw, str) or not raw:
         raise ScopeError("empty_path")
@@ -106,7 +107,8 @@ def resolve_within_roots(raw: str, roots: Sequence[str]) -> Path:
     if raw[0] in "\\/":
         raise ScopeError("unc_path")
     # Drive present but not a fully absolute X:\ or X:/ path -> C:foo.
-    if PureWindowsPath(raw).drive:
+    win = PureWindowsPath(raw)
+    if win.drive:
         if not (
             len(raw) >= 3
             and raw[1] == ":"
@@ -114,11 +116,23 @@ def resolve_within_roots(raw: str, roots: Sequence[str]) -> Path:
             and raw[2] in "\\/"
         ):
             raise ScopeError("drive_relative")
-    for component in re.split(r"[\\/]", raw):
+    # Component rules inspect everything after the drive part (``C:\``) and
+    # any root part (``\``/``/``), so the drive colon never reaches the ADS
+    # check while ``file.txt:stream`` still does.
+    parts = win.parts[1:] if win.drive else win.parts
+    if parts and parts[0] in ("\\", "/"):
+        parts = parts[1:]
+    for component in parts:
         if component == "..":
             raise ScopeError("dotdot")
         if _SHORT_NAME_RE.match(component):
             raise ScopeError("short_name")
+        if ":" in component:
+            raise ScopeError("ads_stream")
+        # Windows strips trailing dots/spaces at the API level, turning
+        # ``.. `` / ``...`` / ``name.`` into a different component.
+        if component != component.rstrip(" ."):
+            raise ScopeError("invalid_component")
     candidate = Path(raw).resolve(strict=False)
     try:
         candidate_real = os.path.normcase(os.path.realpath(candidate))
