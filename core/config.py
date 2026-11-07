@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 FROZEN = getattr(sys, "frozen", False)
 TEST_MODE = os.getenv("JARVIS_TEST_MODE") == "1"
+WORKER_MODE = os.getenv("JARVIS_WORKER") == "1"
 
 
 def data_dir():
@@ -20,16 +21,18 @@ def data_dir():
 
 PROJECT_DIR = data_dir()
 ENV_PATH = os.path.join(PROJECT_DIR, "config.env" if FROZEN else ".env")
-load_dotenv(ENV_PATH)
+if not WORKER_MODE:
+    load_dotenv(ENV_PATH)
 
-try:
-    from core.vault import load_vault
-    _vault = load_vault(ENV_PATH)
-    if _vault:
-        for k, v in _vault.items():
-            os.environ[k] = v
-except Exception:
-    pass
+if not WORKER_MODE:
+    try:
+        from core.vault import load_vault
+        _vault = load_vault(ENV_PATH)
+        if _vault:
+            for k, v in _vault.items():
+                os.environ[k] = v
+    except Exception:
+        pass
 
 ASSISTANT_NAME = "JARVIS"
 
