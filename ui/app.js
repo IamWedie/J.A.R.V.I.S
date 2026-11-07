@@ -20,6 +20,13 @@ const textInput = document.getElementById('textInput');
 const sendBtn = document.getElementById('sendBtn');
 const approvalBox = document.getElementById('approvalBox');
 const approvalText = document.getElementById('approvalText');
+const approvalRequestId = document.getElementById('approvalRequestId');
+const approvalRisk = document.getElementById('approvalRisk');
+const approvalCaps = document.getElementById('approvalCaps');
+const approvalScope = document.getElementById('approvalScope');
+const btnAllowAlways = document.getElementById('btnAllowAlways');
+const btnDenyEl = document.getElementById('btnDeny');
+let currentApproval = null;
 const modelSelect = document.getElementById('modelSelect');
 const wakeBtn = document.getElementById('wakeBtn');
 const settingsBtn = document.getElementById('settingsBtn');
@@ -28,6 +35,57 @@ const voiceStatusEl = document.getElementById('voiceStatus');
 
 const wizard = document.getElementById('setupWizard');
 let validatedKey = null;
+
+/* === APPROVAL (request-bound) === */
+function clearApproval() {
+    currentApproval = null;
+    approvalBox.classList.add('hidden');
+    delete approvalBox.dataset.requestId;
+    approvalRequestId.textContent = '';
+    approvalRisk.textContent = '';
+    approvalCaps.textContent = '';
+    approvalScope.textContent = '';
+    approvalScope.classList.add('hidden');
+    btnAllowAlways.classList.add('hidden');
+}
+function showApproval(msg) {
+    if (!msg || typeof msg !== 'object' || typeof msg.request_id !== 'string' || !msg.request_id) {
+        showToast(t('approval_invalid'), 'error', 8000);
+        return;
+    }
+    currentApproval = msg;
+    approvalBox.dataset.requestId = msg.request_id;
+    approvalText.textContent = t('approval_requires', { description: msg.description || '' });
+    approvalRequestId.textContent = t('approval_request_id', { id: msg.request_id });
+    const allowedRisks = ['safe', 'guarded', 'sensitive', 'critical'];
+    const risk = allowedRisks.includes(msg.risk) ? msg.risk : 'unknown';
+    approvalRisk.className = 'approvalRisk risk-' + risk;
+    approvalRisk.textContent = t('approval_risk', { risk: risk.toUpperCase() });
+    const caps = Array.isArray(msg.capabilities) ? msg.capabilities.filter(c => typeof c === 'string') : [];
+    const capsText = caps.length ? caps.join(', ') : '—';
+    approvalCaps.textContent = t('approval_caps', { caps: capsText });
+    if (msg.can_grant === true && typeof msg.grant_scope === 'string' && msg.grant_scope) {
+        approvalScope.textContent = t('approval_scope', { scope: msg.grant_scope });
+        approvalScope.classList.remove('hidden');
+        btnAllowAlways.classList.remove('hidden');
+    } else {
+        approvalScope.textContent = '';
+        approvalScope.classList.add('hidden');
+        btnAllowAlways.classList.add('hidden');
+    }
+    approvalBox.classList.remove('hidden');
+    btnDenyEl.focus();
+    showToast(t('action_requires_approval'), 'warning', 8000);
+}
+function sendApproval(decision) {
+    if (!currentApproval || typeof currentApproval.request_id !== 'string' || !currentApproval.request_id) {
+        clearApproval();
+        return;
+    }
+    const requestId = currentApproval.request_id;
+    clearApproval();
+    send({ cmd: 'approval_response', request_id: requestId, decision });
+}
 
 /* === TOAST SYSTEM === */
 function showToast(text, type = 'info', duration = 4000) {
@@ -93,14 +151,13 @@ const I18N = {
         error_prefix: 'Error: {message}',
         approval_requires: 'JARVIS wants to: {description}',
         action_requires_approval: 'Action requires approval',
-        update_available: 'Update available: v{latest} (you have v{current})',
-        new_version_available: 'A new version (v{latest}) is available. Click the update button in settings to download.',
-        checking_updates: 'Checking for updates...',
-        downloading_update: 'Downloading update...',
-        update_ready: 'Update ready — restarting...',
-        no_update: 'No update available',
-        update_download_failed: 'Download failed',
-        update_install_failed: 'Install failed',
+        approval_title: 'Approval required',
+        approval_request_id: 'Request: {id}',
+        approval_risk: 'Risk: {risk}',
+        approval_caps: 'Capabilities: {caps}',
+        approval_scope: 'Grant scope: {scope}',
+        allow_always: 'ALLOW ALWAYS',
+        approval_invalid: 'Ignored malformed approval request.',
         memory_remembered: '{conversations} messages remembered | {facts} facts',
         test: 'Testing voice...',
         confirm_wipe: 'Erase ALL memories and conversations permanently?',
@@ -135,7 +192,6 @@ const I18N = {
         forget_everything: 'مسح كل شيء',
         voice_speed: 'الصوت والسرعة',
         test_voice: 'اختبار الصوت',
-        check_updates: 'التحقق من التحديثات',
         no_internet: 'لا يوجد اتصال بالإنترنت — الميزات الصوتية والذكية غير متاحة',
         deny: 'رفض',
         approve: 'موافقة',
@@ -186,14 +242,13 @@ const I18N = {
         error_prefix: 'خطأ: {message}',
         approval_requires: 'جارفيس يريد: {description}',
         action_requires_approval: 'يتطلب هذا الإجراء موافقة',
-        update_available: 'تحديث متاح: v{latest} (عندك v{current})',
-        new_version_available: 'تتوفر نسخة جديدة (v{latest}). اضغط زر التحديث في الإعدادات للتحميل.',
-        checking_updates: 'جاري التحقق من التحديثات...',
-        downloading_update: 'جاري تحميل التحديث...',
-        update_ready: 'التحديث جاهز — جاري إعادة التشغيل...',
-        no_update: 'لا يوجد تحديث متاح',
-        update_download_failed: 'فشل التحميل',
-        update_install_failed: 'فشل التثبيت',
+        approval_title: 'مطلوب موافقة',
+        approval_request_id: 'طلب: {id}',
+        approval_risk: 'خطورة: {risk}',
+        approval_caps: 'القدرات: {caps}',
+        approval_scope: 'نطاق المنح: {scope}',
+        allow_always: 'السماح دائماً',
+        approval_invalid: 'تم تجاهل طلب موافقة غير صالح.',
         memory_remembered: '{conversations} رسائل | {facts} حقائق',
         test: 'جاري اختبار الصوت...',
         confirm_wipe: 'مسح جميع الذكريات والمحادثات نهائياً؟',
@@ -452,11 +507,13 @@ function connect() {
         WSAUTHED = false;
         authRejected = false;
         pendingSends.length = 0;
+        clearApproval();
         ws.send(JSON.stringify({ cmd: 'auth', token: JARVIS_TOKEN }));
     };
     ws.onmessage = onMessage;
     ws.onclose = (e) => {
         WSAUTHED = false;
+        clearApproval();
         if (e && e.code === 4001) {
             document.getElementById('status').textContent = t('session_replaced');
             showToast(t('session_replaced'), 'warning', 10000);
@@ -489,14 +546,17 @@ function onMessage(ev) {
             break;
         case 'auth_error':
             WSAUTHED = false;
+            clearApproval();
             if (!authRejected) showToast(t('auth_failed'), 'error', 8000);
             authRejected = true;
             break;
         case 'session_revoked':
             WSAUTHED = false;
+            clearApproval();
             break;
         case 'session_inactive':
             WSAUTHED = false;
+            clearApproval();
             showToast(t('session_inactive'), 'warning');
             break;
         case 'state':
@@ -523,10 +583,7 @@ function onMessage(ev) {
             }
             break;
         case 'approval_request':
-            approvalText.textContent = t('approval_requires', { description: msg.description });
-            approvalBox.classList.remove('hidden');
-            document.getElementById('btnApprove').focus();
-            showToast(t('action_requires_approval'), 'warning', 8000);
+            showApproval(msg);
             break;
         case 'cleared':
             chatlog.innerHTML = '';
@@ -576,15 +633,6 @@ function onMessage(ev) {
             addMsg(t('error_prefix', { message: msg.message }), 'jarvis');
             showToast(msg.message, 'error', 6000);
             break;
-        case 'update_available':
-            showToast(t('update_available', { latest: msg.latest, current: msg.current }), 'info', 10000);
-            addMsg(t('new_version_available', { latest: msg.latest }), 'jarvis');
-            break;
-        case 'update_progress':
-            if (msg.status === 'checking') showToast(t('checking_updates'), 'info', 3000);
-            else if (msg.status === 'downloading') showToast(t('downloading_update'), 'info', 10000);
-            else if (msg.status === 'ready') showToast(t('update_ready'), 'success');
-            break;
     }
 }
 
@@ -623,14 +671,9 @@ function submitText() {
 }
 
 /* === APPROVAL === */
-document.getElementById('btnApprove').addEventListener('click', () => {
-    approvalBox.classList.add('hidden');
-    send({ cmd: 'approval', approved: true });
-});
-document.getElementById('btnDeny').addEventListener('click', () => {
-    approvalBox.classList.add('hidden');
-    send({ cmd: 'approval', approved: false });
-});
+document.getElementById('btnApprove').addEventListener('click', () => sendApproval('allow'));
+document.getElementById('btnDeny').addEventListener('click', () => sendApproval('deny'));
+btnAllowAlways.addEventListener('click', () => sendApproval('allow_always'));
 
 /* === MODELS === */
 async function loadModels() {
@@ -719,10 +762,7 @@ document.getElementById('testVoiceBtn').addEventListener('click', () => {
     showToast(t('testing_voice'), 'info', 2000);
 });
 
-/* === UPDATE === */
-document.getElementById('updateBtn').addEventListener('click', () => {
-    send({ cmd: 'update_download' });
-});
+/* === VERSION === */
 async function loadVersion() {
     try {
         const r = await apiFetch('/api/status');

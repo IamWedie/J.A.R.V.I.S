@@ -111,7 +111,6 @@
             <option value="ar">العربية</option>
         </select>
         <div class="settingsDivider"></div>
-        <button id="updateBtn" class="update" aria-label="Check for updates" data-i18n="check_updates">CHECK FOR UPDATES</button>
         <p class="hint">Version: <span id="versionLabel">...</span></p>
         <p class="hint" data-i18n="enroll_info">Enroll = say 3 short phrases. After that JARVIS only obeys this voice via wake word.</p>
     </div>
@@ -122,11 +121,18 @@
 
     <div id="chatlog" role="log" aria-label="Conversation history" aria-live="polite"></div>
 
-    <div id="approvalBox" class="hidden" role="alertdialog" aria-label="Approval required">
+    <div id="approvalBox" class="hidden" role="alertdialog" aria-modal="true"
+         aria-labelledby="approvalTitle" aria-describedby="approvalText" tabindex="-1">
+        <div id="approvalTitle" data-i18n="approval_title">Approval required</div>
         <div id="approvalText"></div>
+        <div id="approvalRequestId"></div>
+        <div id="approvalRisk" class="approvalRisk"></div>
+        <div id="approvalCaps" class="approvalCaps"></div>
+        <div id="approvalScope" class="approvalScope hidden"></div>
         <div class="approvalButtons">
             <button id="btnDeny" class="deny" aria-label="Deny request" data-i18n="deny">DENY</button>
-            <button id="btnApprove" class="approve" aria-label="Approve request" data-i18n="approve">APPROVE</button>
+            <button id="btnApprove" class="approve" aria-label="Approve once" data-i18n="approve">APPROVE</button>
+            <button id="btnAllowAlways" class="allowAlways hidden" aria-label="Always allow this scope" data-i18n="allow_always">ALLOW ALWAYS</button>
         </div>
     </div>
 
