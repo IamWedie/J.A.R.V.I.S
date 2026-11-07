@@ -1,6 +1,13 @@
-"""Tests for core.tools.pc_tools module."""
-import sys
+"""Tests for core.tools.pc_tools module.
+
+These tests must be hermetic: they must not open Explorer, toggle Wi-Fi, run a
+network speed test, invoke ``shutdown``, or manipulate live windows. OS-facing
+calls are monkeypatched; the signed application code is not changed.
+"""
 import os
+import sys
+from types import ModuleType, SimpleNamespace
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
@@ -36,10 +43,23 @@ def test_wifi_status():
     assert isinstance(result, str)
 
 
-def test_wifi_toggle():
-    from core.tools.pc_tools import wifi_toggle
-    result = wifi_toggle("on")
-    assert isinstance(result, str)
+def test_wifi_toggle(monkeypatch):
+    from core.tools import pc_tools
+
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(pc_tools.subprocess, "run", fake_run)
+
+    result = pc_tools.wifi_toggle("on")
+
+    assert result == "WiFi enabled via Wi-Fi."
+    assert calls == [
+        ["netsh", "interface", "set", "interface", "Wi-Fi", "admin=enable"]
+    ]
 
 
 def test_wifi_list():
@@ -48,10 +68,31 @@ def test_wifi_list():
     assert isinstance(result, str)
 
 
-def test_speed_test():
-    from core.tools.pc_tools import speed_test
-    result = speed_test()
-    assert isinstance(result, str)
+def test_speed_test(monkeypatch):
+    from core.tools import pc_tools
+
+    class FakeSpeedtest:
+        def __init__(self):
+            self.results = SimpleNamespace(ping=12.345)
+
+        def get_best_server(self):
+            return {}
+
+        def download(self):
+            return 100_000_000
+
+        def upload(self):
+            return 50_000_000
+
+    fake_module = ModuleType("speedtest")
+    fake_module.Speedtest = FakeSpeedtest
+    monkeypatch.setitem(sys.modules, "speedtest", fake_module)
+
+    result = pc_tools.speed_test()
+
+    assert result == (
+        "Download: 100.0 Mbps\nUpload: 50.0 Mbps\nPing: 12 ms"
+    )
 
 
 def test_move_file():
@@ -92,10 +133,16 @@ def test_delete_file():
     assert not os.path.exists(path)
 
 
-def test_open_folder():
-    from core.tools.pc_tools import open_folder
-    result = open_folder(os.path.expanduser("~/"))
-    assert "Opened" in result
+def test_open_folder(tmp_path, monkeypatch):
+    from core.tools import pc_tools
+
+    opened = []
+    monkeypatch.setattr(os, "startfile", lambda p: opened.append(p), raising=False)
+
+    result = pc_tools.open_folder(str(tmp_path))
+
+    assert result == f"Opened {tmp_path}"
+    assert opened == [str(tmp_path)]
 
 
 def test_get_brightness():
@@ -104,31 +151,45 @@ def test_get_brightness():
     assert isinstance(result, str)
 
 
-def test_shutdown_pc():
-    from core.tools.pc_tools import shutdown_pc
-    result = shutdown_pc("cancel")
-    assert isinstance(result, str)
+def test_shutdown_pc(monkeypatch):
+    from core.tools import pc_tools
+
+    calls = []
+
+    def fake_popen(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return SimpleNamespace()
+
+    monkeypatch.setattr(pc_tools.subprocess, "Popen", fake_popen)
+
+    result = pc_tools.shutdown_pc("cancel")
+
+    assert result == "PC cancel initiated."
+    assert calls == [("shutdown /a", {"shell": True})]
 
 
-def test_set_wallpaper():
+def test_set_wallpaper(tmp_path):
     from core.tools.pc_tools import set_wallpaper
-    result = set_wallpaper("~/nonexistent.png")
-    assert "not found" in result.lower() or "failed" in result.lower()
+    result = set_wallpaper(str(tmp_path / "nonexistent.png"))
+    assert "not found" in result.lower()
 
 
-def test_maximize_window():
-    from core.tools.pc_tools import maximize_window
-    result = maximize_window("nonexistent_xyz_window")
-    assert "No open window" in result
+def test_maximize_window(monkeypatch):
+    from core.tools import pc_tools
+    monkeypatch.setattr(pc_tools.gw, "getWindowsWithTitle", lambda title: [])
+    result = pc_tools.maximize_window("nonexistent_xyz_window")
+    assert result == "No open window matching 'nonexistent_xyz_window'."
 
 
-def test_snap_window():
-    from core.tools.pc_tools import snap_window
-    result = snap_window("nonexistent_xyz_window", "left")
-    assert "No open window" in result
+def test_snap_window(monkeypatch):
+    from core.tools import pc_tools
+    monkeypatch.setattr(pc_tools.gw, "getWindowsWithTitle", lambda title: [])
+    result = pc_tools.snap_window("nonexistent_xyz_window", "left")
+    assert result == "No open window matching 'nonexistent_xyz_window'."
 
 
-def test_screenshot_window():
-    from core.tools.pc_tools import screenshot_window
-    result = screenshot_window("nonexistent_xyz_window")
-    assert "No open window" in result
+def test_screenshot_window(monkeypatch):
+    from core.tools import pc_tools
+    monkeypatch.setattr(pc_tools.gw, "getWindowsWithTitle", lambda title: [])
+    result = pc_tools.screenshot_window("nonexistent_xyz_window")
+    assert result == "No open window matching 'nonexistent_xyz_window'."
