@@ -15,8 +15,11 @@ import math
 import multiprocessing
 import os
 import secrets
+import tempfile
+import threading
 import time
 
+from core.security.privileged_host import privileged_main
 from core.security.winjob import JobLimits, JobObject
 from core.security.worker import MAX_MESSAGE_BYTES, worker_main
 
@@ -26,6 +29,10 @@ class LaneError(Exception):
 
 
 class LaneTimeout(LaneError):
+    pass
+
+
+class UnknownLane(LaneError):
     pass
 
 
@@ -61,6 +68,9 @@ def _validate_timeout_value(value: object) -> float:
 
 
 class RestrictedLane:
+    _worker_target = staticmethod(worker_main)
+    _use_job = True
+
     def __init__(self, sandbox_dir: str, timeout_default: float = 10.0) -> None:
         if os.name != "nt":
             raise OSError("RestrictedLane requires Windows Job Objects")
@@ -76,6 +86,8 @@ class RestrictedLane:
         self._job = None
         self._nonce: str | None = None
         self._lock = asyncio.Lock()
+        self._busy = False
+        self._reset_lock = threading.Lock()
         self._closed = False
 
     async def call(self, handler: str, args: dict, timeout: float | None = None) -> object:
@@ -106,6 +118,7 @@ class RestrictedLane:
                 if self._proc is not None or self._conn is not None or self._job is not None:
                     await asyncio.to_thread(self._reset_worker_sync)
                 await asyncio.to_thread(self._ensure_worker_sync)
+            self._busy = True
             try:
                 return await asyncio.to_thread(
                     self._exchange_sync, handler, args, effective_timeout
@@ -119,6 +132,8 @@ class RestrictedLane:
             except (EOFError, OSError):
                 await asyncio.to_thread(self._reset_worker_sync)
                 raise LaneError("protocol_error") from None
+            finally:
+                self._busy = False
 
     def _ensure_worker_sync(self) -> None:
         nonce = secrets.token_hex(16)
@@ -129,7 +144,7 @@ class RestrictedLane:
         job = None
         try:
             parent_conn, child_conn = ctx.Pipe(duplex=True)
-            proc = ctx.Process(target=worker_main, args=(child_conn, nonce, self._sandbox_dir), daemon=True)
+            proc = ctx.Process(target=self._worker_target, args=(child_conn, nonce, self._sandbox_dir), daemon=True)
             try:
                 proc.start()
             finally:
@@ -139,7 +154,7 @@ class RestrictedLane:
                     pass
                 child_conn = None
 
-            if os.name == "nt":
+            if self._use_job:
                 job = JobObject(JobLimits(memory_bytes=256 * 1024 * 1024, active_processes=1, die_on_unhandled_exception=True))
                 try:
                     job.assign(proc.pid)
@@ -372,6 +387,9 @@ class RestrictedLane:
         if not isinstance(incoming_nonce, str) or not hmac.compare_digest(incoming_nonce, nonce):
             raise LaneError("worker_nonce_mismatch")
 
+        if msg.get("op") == "cancelled":
+            raise LaneError("cancelled")
+
         if msg.get("op") != "result":
             raise LaneError("protocol_error")
 
@@ -388,38 +406,39 @@ class RestrictedLane:
         raise LaneError("protocol_error")
 
     def _reset_worker_sync(self) -> None:
-        proc = self._proc
-        conn = self._conn
-        job = self._job
-        self._proc = None
-        self._conn = None
-        self._job = None
-        self._nonce = None
-        if proc is not None:
-            try:
-                if proc.is_alive():
-                    proc.terminate()
-                    proc.join(timeout=5)
+        with self._reset_lock:
+            proc = self._proc
+            conn = self._conn
+            job = self._job
+            self._proc = None
+            self._conn = None
+            self._job = None
+            self._nonce = None
+            if proc is not None:
+                try:
                     if proc.is_alive():
-                        try:
-                            proc.kill()
-                        except Exception:
-                            pass
+                        proc.terminate()
                         proc.join(timeout=5)
-                else:
-                    proc.join(timeout=1)
-            except Exception:
-                pass
-        if conn is not None:
-            try:
-                conn.close()
-            except Exception:
-                pass
-        if job is not None:
-            try:
-                job.close()
-            except Exception:
-                pass
+                        if proc.is_alive():
+                            try:
+                                proc.kill()
+                            except Exception:
+                                pass
+                            proc.join(timeout=5)
+                    else:
+                        proc.join(timeout=1)
+                except Exception:
+                    pass
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            if job is not None:
+                try:
+                    job.close()
+                except Exception:
+                    pass
 
     def close(self) -> None:
         if self._closed:
@@ -429,3 +448,131 @@ class RestrictedLane:
             self._reset_worker_sync()
         except Exception:
             pass
+
+
+class PrivilegedLane(RestrictedLane):
+    _worker_target = staticmethod(privileged_main)
+    _use_job = False
+
+    CANCEL_GRACE_SECONDS = 1.0
+
+    def __init__(self, timeout_default: float = 15.0) -> None:
+        super().__init__(tempfile.gettempdir(), timeout_default)
+
+    async def cancel_current(self) -> bool:
+        if not self._busy:
+            return False
+        conn = self._conn
+        nonce = self._nonce
+        if conn is None or nonce is None:
+            return False
+        payload = {"nonce": nonce, "op": "cancel"}
+        try:
+            encoded = json.dumps(
+                payload, ensure_ascii=True, allow_nan=False, separators=(",", ":")
+            ).encode("utf-8")
+            if len(encoded) > MAX_MESSAGE_BYTES:
+                raise ValueError("message_too_large")
+            conn.send_bytes(encoded)
+        except Exception:
+            await asyncio.to_thread(self._reset_worker_sync)
+            return True
+        for _ in range(100):
+            if not self._busy:
+                break
+            await asyncio.sleep(0.01)
+        await asyncio.to_thread(self._reset_worker_sync)
+        return True
+
+
+class EgressLane(RestrictedLane):
+    pass
+
+
+class CoreLane:
+    def __init__(self, registry) -> None:
+        self._registry = registry
+
+    async def call(self, tool_name: str, args: dict, timeout: float) -> object:
+        if not isinstance(args, dict):
+            raise ValueError("invalid args")
+        timeout_value = _validate_timeout_value(timeout)
+        try:
+            handler = self._registry.resolve_handler(tool_name)
+        except Exception:
+            raise LaneError("unknown_tool") from None
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(handler, **args), timeout=timeout_value
+            )
+        except asyncio.TimeoutError:
+            raise LaneTimeout("lane_timeout") from None
+
+    def close(self) -> None:
+        pass
+
+
+class LaneDispatcher:
+    def __init__(self, registry, sandbox_dir, *, lanes=None) -> None:
+        self._registry = registry
+        self._closed = False
+        if lanes is not None:
+            self._lanes = dict(lanes)
+            return
+        if not isinstance(sandbox_dir, str) or not sandbox_dir:
+            raise ValueError("sandbox_dir must be a non-empty str")
+        base = os.path.abspath(sandbox_dir)
+        os.makedirs(base, exist_ok=True)
+        restricted_dir = os.path.join(base, "restricted")
+        egress_dir = os.path.join(base, "egress")
+        os.makedirs(restricted_dir, exist_ok=True)
+        os.makedirs(egress_dir, exist_ok=True)
+        created = []
+        try:
+            core = CoreLane(registry)
+            created.append(core)
+            restricted = RestrictedLane(restricted_dir)
+            created.append(restricted)
+            privileged = PrivilegedLane()
+            created.append(privileged)
+            egress = EgressLane(egress_dir)
+            created.append(egress)
+        except Exception:
+            for lane in created:
+                try:
+                    lane.close()
+                except Exception:
+                    pass
+            raise
+        self._lanes = {
+            "core": core,
+            "restricted": restricted,
+            "privileged": privileged,
+            "egress": egress,
+        }
+
+    async def dispatch(self, spec, args: dict) -> object:
+        if self._closed:
+            raise LaneError("dispatcher_closed")
+        lane_name = getattr(spec, "lane", None)
+        lane = self._lanes.get(lane_name) if isinstance(lane_name, str) else None
+        if lane is None:
+            raise UnknownLane(f"unknown_lane:{lane_name}")
+        if lane_name == "core":
+            handler = getattr(spec, "name", None)
+        else:
+            handler = getattr(spec, "handler", None)
+        if not isinstance(handler, str) or not handler:
+            raise LaneError("invalid_spec")
+        timeout = getattr(spec, "timeout_seconds", None)
+        return await lane.call(handler, args, timeout=timeout)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        for lane in list(self._lanes.values()):
+            try:
+                lane.close()
+            except Exception:
+                pass
