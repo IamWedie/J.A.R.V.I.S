@@ -1,4 +1,12 @@
-"""Restricted lane: job-limited worker process managed per call."""
+"""Restricted lane: job-limited worker process managed per call.
+
+Stable error tokens include lane_closed, invalid_handler,
+invalid_args, job_assign_failed, worker_ready_timeout,
+worker_nonce_mismatch, message_too_large, protocol_error,
+worker_error, handler_error, invalid_request, and
+unserializable_result. LaneTimeout ("lane_timeout") subclasses
+LaneError for timeouts.
+"""
 
 import asyncio
 import hmac
@@ -54,6 +62,8 @@ def _validate_timeout_value(value: object) -> float:
 
 class RestrictedLane:
     def __init__(self, sandbox_dir: str, timeout_default: float = 10.0) -> None:
+        if os.name != "nt":
+            raise OSError("RestrictedLane requires Windows Job Objects")
         if not isinstance(sandbox_dir, str) or not sandbox_dir:
             raise ValueError("sandbox_dir must be a non-empty str")
         resolved = os.path.abspath(sandbox_dir)
@@ -145,6 +155,11 @@ class RestrictedLane:
                         job.close()
                     except Exception:
                         pass
+                    try:
+                        parent_conn.close()
+                    except Exception:
+                        pass
+                    parent_conn = None
                     raise LaneError("job_assign_failed") from None
 
             # wait for ready with 5s deadline via poll
@@ -168,7 +183,24 @@ class RestrictedLane:
 
             try:
                 data = parent_conn.recv_bytes(MAX_MESSAGE_BYTES)
-            except (EOFError, OSError, ValueError):
+            except ValueError:
+                try:
+                    if proc.is_alive():
+                        proc.terminate()
+                        proc.join(timeout=5)
+                except Exception:
+                    pass
+                if job is not None:
+                    try:
+                        job.close()
+                    except Exception:
+                        pass
+                try:
+                    parent_conn.close()
+                except Exception:
+                    pass
+                raise LaneError("message_too_large") from None
+            except (EOFError, OSError):
                 try:
                     if proc.is_alive():
                         proc.terminate()
