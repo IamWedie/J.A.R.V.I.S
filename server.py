@@ -21,6 +21,7 @@ from core.net import netmsg
 from core.security.auth import ALLOWED_ORIGINS, LaunchToken, Session, SessionManager, origin_allowed
 from core.security.commands import CommandRouter
 from core.security.http import TOKEN_HEADER, inject_token_meta, security_headers
+from core.security.voice_approval import VoiceApprovalProvider
 
 from datetime import datetime
 from core.logging_setup import get_logger
@@ -826,6 +827,19 @@ class _DenyApprovalPort:
             decision,
         )
         return False
+
+
+class ServerVoiceApprovalProvider(VoiceApprovalProvider):
+    """Server-wired voice approvals; not instantiated until Task 18."""
+
+    def __init__(self, audit=None):
+        super().__init__(
+            voiceid,
+            lambda audio: asyncio.to_thread(transcriber.transcribe_array, audio),
+            capture_command,
+            speaker.speak,
+            audit=audit,
+        )
 
 
 #: Non-tool command routing. ``audit`` stays ``None`` until Task 18's runtime
