@@ -3,6 +3,8 @@ import sys
 
 from dotenv import load_dotenv
 
+from core.security.secrets import SECRET_KEYS, SecretStore
+
 FROZEN = getattr(sys, "frozen", False)
 TEST_MODE = os.getenv("JARVIS_TEST_MODE") == "1"
 WORKER_MODE = os.getenv("JARVIS_WORKER") == "1"
@@ -26,11 +28,11 @@ if not WORKER_MODE:
 
 if not WORKER_MODE:
     try:
-        from core.vault import load_vault
-        _vault = load_vault(ENV_PATH)
+        _vault = SecretStore(ENV_PATH + ".vault").all()
         if _vault:
             for k, v in _vault.items():
-                os.environ[k] = v
+                if not os.environ.get(k):
+                    os.environ[k] = v
     except Exception:
         pass
 
@@ -97,10 +99,19 @@ PORT = 8741
 
 
 def save_settings(updates):
+    env_path = ENV_PATH
+    secret_updates = {k: v for k, v in updates.items() if k in SECRET_KEYS}
+    plain_updates = {k: v for k, v in updates.items() if k not in SECRET_KEYS}
+
+    if secret_updates:
+        store = SecretStore(env_path + ".vault")
+        for k, v in secret_updates.items():
+            store.set(k, str(v))
+
     lines = []
     existing = {}
-    if os.path.exists(ENV_PATH):
-        with open(ENV_PATH, "r", encoding="utf-8") as f:
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.rstrip("\n")
                 stripped = line.strip()
@@ -109,13 +120,40 @@ def save_settings(updates):
                     existing[k.strip()] = v.strip()
                 else:
                     lines.append(line)
-    for k, v in updates.items():
+    for k, v in plain_updates.items():
         existing[k] = str(v)
-    with open(ENV_PATH, "w", encoding="utf-8") as f:
-        for line in lines:
-            f.write(line + "\n")
-        for k, v in existing.items():
-            f.write(f"{k}={v}\n")
+    for k in secret_updates:
+        existing.pop(k, None)
+
+    import tempfile
+
+    env_dir = os.path.dirname(os.path.abspath(env_path)) or "."
+    os.makedirs(env_dir, exist_ok=True)
+    fd, temp_path = tempfile.mkstemp(dir=env_dir, prefix=".env-", suffix=".tmp")
+    try:
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                for line in lines:
+                    f.write(line + "\n")
+                for k, v in existing.items():
+                    f.write(f"{k}={v}\n")
+                f.flush()
+        except OSError:
+            raise
+        os.replace(temp_path, env_path)
+        temp_path = None
+    finally:
+        if temp_path is not None and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+
+
+def migrate_secrets():
+    from core.security.secrets import migrate_plaintext_secrets
+
+    return migrate_plaintext_secrets(ENV_PATH, ENV_PATH + ".vault")
 
 
 def validate_pin(pin):

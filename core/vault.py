@@ -63,29 +63,13 @@ def decrypt(encoded):
     return None
 
 
-SECRET_KEYS = {"ZEN_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "PHONE_PIN", "JARVIS_PIN"}
+SECRET_KEYS = {"ZEN_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "PHONE_PIN", "JARVIS_PIN", "LICENSE_KEY"}
 
 
 def encrypt_env_file(env_path):
-    if not os.path.exists(env_path):
-        return
-    vault_path = env_path + ".vault"
-    lines = []
-    with open(env_path, "r", encoding="utf-8") as f:
-        for line in f:
-            stripped = line.strip()
-            if stripped and not stripped.startswith("#") and "=" in stripped:
-                key, val = stripped.split("=", 1)
-                key = key.strip()
-                if key in SECRET_KEYS and val.strip():
-                    enc = encrypt(val.strip())
-                    if enc:
-                        lines.append(f"{key}=enc:{enc}\n")
-                        continue
-            lines.append(line)
-    with open(vault_path, "w", encoding="utf-8") as f:
-        f.writelines(lines)
-    log.info("encrypted vault created: %s", vault_path)
+    from core.security.secrets import migrate_plaintext_secrets
+
+    return migrate_plaintext_secrets(env_path, os.fspath(env_path) + ".vault")
 
 
 def decrypt_env_value(val):

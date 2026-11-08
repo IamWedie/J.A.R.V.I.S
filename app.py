@@ -112,9 +112,17 @@ if __name__ == "__main__":
     set_app_user_model_id()
 
     if "--encrypt-env" in sys.argv:
-        from core.vault import encrypt_env_file
-        encrypt_env_file(config.ENV_PATH)
-        print("Secrets encrypted. .env.vault created.")
+        from core.security.secrets import SecretMigrationError, migrate_plaintext_secrets
+
+        try:
+            migrated = migrate_plaintext_secrets()
+        except SecretMigrationError as e:
+            print(f"Secret migration failed: {e}")
+            sys.exit(1)
+        if migrated:
+            print(f"Secrets migrated: {', '.join(sorted(migrated))}")
+        else:
+            print("No plaintext secrets to migrate.")
         sys.exit(0)
 
     start_hidden = "--hidden" in sys.argv

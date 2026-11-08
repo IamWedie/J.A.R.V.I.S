@@ -1103,6 +1103,19 @@ async def _check_for_updates():
 async def startup():
     global main_loop
     _install_security(build_runtime(**SECURITY_BUILD_ARGS))
+    try:
+        migrated = config.migrate_secrets()
+    except Exception as e:
+        log.warning("secret migration failed: %s", e)
+        migrated = []
+    if migrated:
+        _audit(
+            "secret.migrated",
+            source="runtime",
+            tool="secret_store",
+            result_status="ok",
+            args={"keys": sorted(migrated)},
+        )
     if config.TEST_MODE:
         return
     main_loop = asyncio.get_running_loop()
