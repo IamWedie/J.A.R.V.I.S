@@ -286,7 +286,7 @@
       "code_files": [
         {
           "path": "core/tools/assistant_tools.py",
-          "sha256": "bfbc6d7b01b027d800781cd5d0e37a406743580d69e187202d1ba85fb30099f0"
+          "sha256": "d5e4b37c2b790687a0071cd717d4ad755c9738f9a8ffeecf4dfbf025c4668037"
         }
       ],
       "description": "Schedule a reminder after a number of minutes.",
@@ -323,7 +323,7 @@
       "code_files": [
         {
           "path": "core/tools/assistant_tools.py",
-          "sha256": "bfbc6d7b01b027d800781cd5d0e37a406743580d69e187202d1ba85fb30099f0"
+          "sha256": "d5e4b37c2b790687a0071cd717d4ad755c9738f9a8ffeecf4dfbf025c4668037"
         }
       ],
       "description": "Schedule an alarm at a clock time.",
@@ -359,7 +359,7 @@
       "code_files": [
         {
           "path": "core/tools/assistant_tools.py",
-          "sha256": "bfbc6d7b01b027d800781cd5d0e37a406743580d69e187202d1ba85fb30099f0"
+          "sha256": "d5e4b37c2b790687a0071cd717d4ad755c9738f9a8ffeecf4dfbf025c4668037"
         }
       ],
       "description": "List pending reminders and alarms with time remaining.",
@@ -384,7 +384,7 @@
       "code_files": [
         {
           "path": "core/tools/assistant_tools.py",
-          "sha256": "bfbc6d7b01b027d800781cd5d0e37a406743580d69e187202d1ba85fb30099f0"
+          "sha256": "d5e4b37c2b790687a0071cd717d4ad755c9738f9a8ffeecf4dfbf025c4668037"
         }
       ],
       "description": "Cancel pending reminders matching a keyword, or all of them.",
@@ -758,7 +758,7 @@
       "code_files": [
         {
           "path": "core/tools/assistant_tools.py",
-          "sha256": "bfbc6d7b01b027d800781cd5d0e37a406743580d69e187202d1ba85fb30099f0"
+          "sha256": "d5e4b37c2b790687a0071cd717d4ad755c9738f9a8ffeecf4dfbf025c4668037"
         }
       ],
       "description": "Store a fact in long-term memory.",
@@ -790,7 +790,7 @@
       "code_files": [
         {
           "path": "core/tools/assistant_tools.py",
-          "sha256": "bfbc6d7b01b027d800781cd5d0e37a406743580d69e187202d1ba85fb30099f0"
+          "sha256": "d5e4b37c2b790687a0071cd717d4ad755c9738f9a8ffeecf4dfbf025c4668037"
         }
       ],
       "description": "Remove stored facts containing a substring.",
@@ -822,7 +822,7 @@
       "code_files": [
         {
           "path": "core/tools/assistant_tools.py",
-          "sha256": "bfbc6d7b01b027d800781cd5d0e37a406743580d69e187202d1ba85fb30099f0"
+          "sha256": "d5e4b37c2b790687a0071cd717d4ad755c9738f9a8ffeecf4dfbf025c4668037"
         }
       ],
       "description": "Recall stored facts and past conversation matching a query.",
@@ -855,7 +855,7 @@
       "code_files": [
         {
           "path": "core/tools/assistant_tools.py",
-          "sha256": "bfbc6d7b01b027d800781cd5d0e37a406743580d69e187202d1ba85fb30099f0"
+          "sha256": "d5e4b37c2b790687a0071cd717d4ad755c9738f9a8ffeecf4dfbf025c4668037"
         }
       ],
       "description": "Build the morning briefing with weather, news, and reminders.",

@@ -2,7 +2,8 @@
 
 Each adapter is a one-call passthrough so the signed tool manifest can point
 at a single small module.  ``recall_memories`` is the unchanged body of
-``core.brain._recall_memories`` (Task 21 will switch ``brain.py`` to call it).
+``core.brain._recall_memories``; the secure runtime calls this adapter
+directly and ``brain.py`` has no such call.
 Imports stay module-level so tests can monkeypatch; nothing runs at import
 time and ``core.brain`` is never imported here (avoids a cycle).
 """
