@@ -1,6 +1,7 @@
 import asyncio
 import ctypes
 import logging
+import multiprocessing
 import os
 import sys
 import threading
@@ -12,6 +13,7 @@ import webview
 
 import core.config as config
 from core.logging_setup import setup_logging, get_logger
+import server
 from server import app, brain
 
 log = get_logger("app")
@@ -99,6 +101,7 @@ def set_taskbar_icon():
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     setup_logging()
     log.info("JARVIS session starting")
 
@@ -130,6 +133,7 @@ if __name__ == "__main__":
         resizable=True,
         background_color="#070b14",
     )
+    server.set_show_window_callback(lambda: (window.show(), window.restore()))
 
     from tray import start_tray, on_window_close_request, set_pause_callback
     window.events.closing += on_window_close_request

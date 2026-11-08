@@ -17,10 +17,11 @@ from core.mic import mic, SAMPLE_RATE
 from core.stt import transcriber
 from core.tts import speaker
 from core.voiceid import voiceid
-from core.net import netmsg
 from core.security.auth import ALLOWED_ORIGINS, LaunchToken, Session, SessionManager, origin_allowed
 from core.security.commands import CommandRouter
+from core.security.features import DEFAULT_FEATURES
 from core.security.http import TOKEN_HEADER, inject_token_meta, security_headers
+from core.security.runtime import build_runtime
 from core.security.voice_approval import VoiceApprovalProvider
 
 from datetime import datetime
@@ -39,9 +40,64 @@ app.add_middleware(
 UI_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
 LAUNCH_TOKEN = LaunchToken.generate()
 SESSIONS = SessionManager()
+CODE_ROOT = os.path.dirname(os.path.abspath(__file__))
+SECURITY = None
+SECURITY_BUILD_ARGS = {}
+COMMAND_ROUTER = None
+_show_window_impl = None
 REPLACEMENT_GRACE_SECONDS = 0.5
 MAX_AUTH_ATTEMPTS = 3
 AUTH_ATTEMPT_TIMEOUT_SECONDS = 5.0
+
+
+def set_show_window_callback(fn):
+    """Store the desktop window callback used by approval prompts."""
+    global _show_window_impl
+    _show_window_impl = fn if callable(fn) else None
+
+
+def _show_window():
+    impl = _show_window_impl
+    if impl is None:
+        return None
+    try:
+        return impl()
+    except Exception:
+        return None
+
+
+def _active_session_id() -> str:
+    active = SESSIONS.get_active()
+    if active is not None:
+        return active.session_id
+    return "local"
+
+
+def _audit(event_type, *, session_id=None, source="ws", **extra):
+    """Append one WS-boundary audit row; never blocks auth or disconnect."""
+    runtime = SECURITY
+    if runtime is None:
+        return
+    audit = getattr(runtime, "audit", None)
+    if audit is None:
+        return
+    try:
+        audit.append(event_type, session_id=session_id, source=source, **extra)
+    except Exception:
+        pass
+
+
+def _approvals_cancel(session_id, reason="session_closed"):
+    runtime = SECURITY
+    if runtime is None:
+        return
+    approvals = getattr(runtime, "approvals", None)
+    if approvals is None:
+        return
+    try:
+        approvals.cancel_session(session_id, reason)
+    except Exception:
+        pass
 
 
 @app.middleware("http")
@@ -190,8 +246,11 @@ class SetupIn(BaseModel):
 
 @app.get("/api/setup_status")
 async def api_setup_status():
-    from core import license as license_mod
-    license_needed = _license_gate_active() and not license_mod.is_licensed()
+    if _license_disabled():
+        license_needed = False
+    else:
+        from core import license as license_mod
+        license_needed = _license_gate_active() and not license_mod.is_licensed()
     # In packaged (frozen) builds the installer's key is only trusted once validated
     # (ZEN_KEY_VALIDATED=1), so a bad/forged key can't bypass onboarding. Source
     # developers trust a present key directly.
@@ -207,6 +266,10 @@ def _license_gate_active():
     if not config.FROZEN:
         return False
     return True
+
+
+def _license_disabled():
+    return not DEFAULT_FEATURES.enabled("license_server")
 
 
 class LicenseIn(BaseModel):
@@ -259,6 +322,8 @@ def _auto_activate_license():
 
 @app.get("/api/license_status")
 async def api_license_status():
+    if _license_disabled():
+        return JSONResponse(status_code=404, content={"detail": "not found"})
     from core import license as license_mod
     if not _license_gate_active():
         return {"licensed": True, "gate": False}
@@ -267,6 +332,8 @@ async def api_license_status():
 
 @app.post("/api/license_activate")
 async def api_license_activate(body: LicenseIn):
+    if _license_disabled():
+        return JSONResponse(status_code=404, content={"detail": "not found"})
     from core import license as license_mod
     ok, reason = license_mod.activate(body.key)
     if not ok:
@@ -375,8 +442,9 @@ async def api_memory_stats():
     return memory.stats()
 
 
-async def think_and_speak(user_text, speaker_name=None, source="ui"):
+async def think_and_speak(user_text, speaker_name=None, source="ui", session_id=None):
     global _barge_in_text
+    session_id = session_id or _active_session_id()
     await set_state("thinking")
     if barge_in_enabled:
         mic.start_stream()
@@ -395,7 +463,7 @@ async def think_and_speak(user_text, speaker_name=None, source="ui"):
             asyncio.create_task(set_state("speaking"))
 
     try:
-        reply = await brain.ask(user_text, on_chunk=on_chunk, speaker=speaker_name, source="voice")
+        reply = await brain.ask(user_text, on_chunk=on_chunk, speaker=speaker_name, source=source, session_id=session_id)
     except Exception as e:
         await send_event({"type": "error", "message": str(e)})
         reply = "Sorry sir, something went wrong."
@@ -422,7 +490,7 @@ async def think_and_speak(user_text, speaker_name=None, source="ui"):
         _barge_in_text = None
         log.info(f"[barge] processing interrupted input: {interrupted_text}")
         await send_event({"type": "user_said", "text": interrupted_text})
-        await think_and_speak(interrupted_text, speaker_name=barge_speaker)
+        await think_and_speak(interrupted_text, speaker_name=barge_speaker, source="voice", session_id=session_id)
         return
 
     await set_state("idle")
@@ -454,7 +522,8 @@ async def capture_command():
     return audio
 
 
-async def voice_pipeline(play_intro):
+async def voice_pipeline(play_intro, session_id=None):
+    session_id = session_id or _active_session_id()
     async with processing_lock:
         speaker.stop()
         await set_state("listening")
@@ -490,24 +559,25 @@ async def voice_pipeline(play_intro):
             return
 
         await send_event({"type": "user_said", "text": user_text})
-        await think_and_speak(user_text, speaker_name=speaker_name, source="voice")
-        asyncio.create_task(follow_up_window())
+        await think_and_speak(user_text, speaker_name=speaker_name, source="voice", session_id=session_id)
+        asyncio.create_task(follow_up_window(session_id=session_id))
     update_wake_arm()
 
 
-async def text_flow(user_text):
+async def text_flow(user_text, session_id=None):
     if current_state != "idle":
         return
     await send_event({"type": "user_said", "text": user_text})
     async with processing_lock:
-        await think_and_speak(user_text)
+        await think_and_speak(user_text, source="ui", session_id=session_id or _active_session_id())
     update_wake_arm()
 
 
 CONVERSATION_FOLLOWUP = getattr(config, "CONVERSATION_TIMEOUT", 60)
 
 
-async def follow_up_window():
+async def follow_up_window(session_id=None):
+    session_id = session_id or _active_session_id()
     if mic.wake_enabled:
         return
     if CONVERSATION_FOLLOWUP <= 0:
@@ -559,7 +629,7 @@ async def follow_up_window():
     await send_event({"type": "user_said", "text": user_text})
     await send_event({"type": "state", "value": "listening"})
     async with processing_lock:
-        await think_and_speak(user_text, speaker_name=fu_speaker)
+        await think_and_speak(user_text, speaker_name=fu_speaker, source="voice", session_id=session_id)
     update_wake_arm()
 
 
@@ -621,7 +691,7 @@ async def safe_wake_pipeline():
     try:
         if current_state != "idle" or processing_lock.locked():
             return
-        await voice_pipeline(play_intro=True)
+        await voice_pipeline(play_intro=True, session_id=_active_session_id())
     except Exception as e:
         await send_event({"type": "error", "message": str(e)})
         await set_state("idle")
@@ -661,6 +731,7 @@ async def _ws_handshake(ws: WebSocket) -> Session | None:
     origin_header = ws.headers.get("origin", "")
     if not origin_allowed(origin_header):
         _log_ws_auth_failure("origin", origin_header)
+        _audit("auth.failure", error_code="origin")
         await ws.close(code=1008)
         return None
 
@@ -682,6 +753,8 @@ async def _ws_handshake(ws: WebSocket) -> Session | None:
             try:
                 previous = SESSIONS.activate(session)
                 if previous is not None and previous is not session:
+                    _approvals_cancel(previous.session_id, "session_closed")
+                    _audit("session.close", session_id=previous.session_id, result_status="ok")
                     try:
                         await previous.websocket.send_text(
                             json.dumps({"type": "session_revoked"})
@@ -693,6 +766,8 @@ async def _ws_handshake(ws: WebSocket) -> Session | None:
                         await previous.websocket.close(code=4001)
                     except Exception:
                         pass
+                _audit("auth.success", session_id=session.session_id, result_status="ok")
+                _audit("session.open", session_id=session.session_id, result_status="ok")
                 await ws.send_text(json.dumps({
                     "type": "auth_ok",
                     "session_id": session.session_id,
@@ -703,6 +778,7 @@ async def _ws_handshake(ws: WebSocket) -> Session | None:
                 raise
             return session
         _log_ws_auth_failure("credentials", origin_header)
+        _audit("auth.failure", error_code="credentials")
         await ws.send_text(json.dumps({"type": "auth_error"}))
     await ws.close(code=1008)
     return None
@@ -749,7 +825,7 @@ class ServerActions:
     async def chat(self, msg):
         text = (msg.get("text") or "").strip()
         if text:
-            asyncio.create_task(text_flow(text))
+            asyncio.create_task(text_flow(text, session_id=_active_session_id()))
 
     async def set_model(self, msg):
         brain.model = msg.get("model") or brain.model
@@ -815,18 +891,13 @@ class ServerActions:
         log.info("WS: unknown command ignored: %s", _safe_cmd(msg.get("cmd")))
 
 
-class _DenyApprovalPort:
-    """Placeholder ``ApprovalPort``; Task 12 wires the real approval manager."""
+class _SecurityAuditProxy:
+    """Lazily resolve ``SECURITY.audit`` for the voice approval provider."""
 
-    def resolve(self, session_id: str, request_id: str, decision: str) -> bool:
-        log.info(
-            "WS: approval response dropped, no approval manager yet "
-            "(session=%s, request=%s, decision=%s)",
-            session_id,
-            request_id,
-            decision,
-        )
-        return False
+    def append(self, *a, **kw):
+        runtime = SECURITY
+        audit = getattr(runtime, "audit", None) if runtime else None
+        return audit.append(*a, **kw) if audit is not None else None
 
 
 class ServerVoiceApprovalProvider(VoiceApprovalProvider):
@@ -842,10 +913,26 @@ class ServerVoiceApprovalProvider(VoiceApprovalProvider):
         )
 
 
-#: Non-tool command routing. ``audit`` stays ``None`` until Task 18's runtime
-#: builds ``SECURITY.audit``: commands with ``requires_audit`` then fail closed
-#: with ``audit_unavailable`` while chat/listen/abort keep working.
-COMMAND_ROUTER = CommandRouter(None, _DenyApprovalPort(), ServerActions())
+VOICE_APPROVAL_PROVIDER = ServerVoiceApprovalProvider(audit=_SecurityAuditProxy())
+
+SECURITY_BUILD_ARGS.update({
+    "token": LAUNCH_TOKEN,
+    "sessions": SESSIONS,
+    "data_dir": config.PROJECT_DIR,
+    "code_root": CODE_ROOT,
+    "frozen": config.FROZEN,
+    "dev_mode": config.TEST_MODE or os.getenv("JARVIS_DEV") == "1",
+    "notify": send_event,
+    "show_window": _show_window,
+    "voice_provider": VOICE_APPROVAL_PROVIDER,
+})
+
+
+def _install_security(runtime):
+    global SECURITY, COMMAND_ROUTER
+    SECURITY = runtime
+    brain.configure(runtime.registry, runtime.broker)
+    COMMAND_ROUTER = CommandRouter(runtime.audit, runtime.approvals, ServerActions())
 
 
 @app.websocket("/ws")
@@ -855,6 +942,9 @@ async def websocket_endpoint(ws: WebSocket):
     try:
         session = await _ws_handshake(ws)
         if session is None:
+            return
+        if COMMAND_ROUTER is None:
+            await ws.close(code=1011)
             return
         await _ws_send_initial(ws)
         while True:
@@ -888,6 +978,9 @@ async def websocket_endpoint(ws: WebSocket):
         pass
     finally:
         if session is not None:
+            _approvals_cancel(session.session_id, "session_closed")
+            if SESSIONS.is_active(session.session_id):
+                _audit("session.close", session_id=session.session_id, result_status="ok")
             SESSIONS.close(session.session_id)
         if ws.application_state == WebSocketState.CONNECTED:
             try:
@@ -900,7 +993,7 @@ async def safe_voice_pipeline():
     try:
         if current_state != "idle" or processing_lock.locked():
             return
-        await voice_pipeline(play_intro=True)
+        await voice_pipeline(play_intro=True, session_id=_active_session_id())
     except Exception as e:
         await send_event({"type": "error", "message": str(e)})
         await set_state("idle")
@@ -1008,12 +1101,15 @@ async def _check_for_updates():
 
 @app.on_event("startup")
 async def startup():
+    global main_loop
+    _install_security(build_runtime(**SECURITY_BUILD_ARGS))
     if config.TEST_MODE:
         return
-    global main_loop
     main_loop = asyncio.get_running_loop()
-    asyncio.create_task(_check_for_updates())
-    _auto_activate_license()
+    if DEFAULT_FEATURES.enabled("auto_update"):
+        asyncio.create_task(_check_for_updates())
+    if DEFAULT_FEATURES.enabled("license_server"):
+        _auto_activate_license()
     mic.on_wake = _on_wake_from_audio_thread
     if config.WAKE_ENABLED_DEFAULT:
         try:
@@ -1025,16 +1121,20 @@ async def startup():
     asyncio.create_task(level_broadcaster())
     asyncio.create_task(startup_greeting())
     asyncio.create_task(away_watcher())
-    asyncio.create_task(phone_reconnect_watchdog())
-    netmsg.start_receiver()
+    if DEFAULT_FEATURES.enabled("phone"):
+        asyncio.create_task(phone_reconnect_watchdog())
+    if DEFAULT_FEATURES.enabled("lan_messaging"):
+        from core.net import netmsg
+        netmsg.start_receiver()
 
     async def _on_reminder(msg):
         await send_event({"type": "reminder", "message": msg})
-        try:
-            from core.net import telegram_bot
-            telegram_bot.telegram_notify(f"⏰ Reminder: {msg}")
-        except Exception:
-            pass
+        if DEFAULT_FEATURES.enabled("telegram"):
+            try:
+                from core.net import telegram_bot
+                telegram_bot.telegram_notify(f"⏰ Reminder: {msg}")
+            except Exception:
+                pass
         speaker.stop()
         await send_event({"type": "state", "value": "speaking"})
         await speaker.speak(f"Reminder: {msg}")
@@ -1043,11 +1143,12 @@ async def startup():
     from core import scheduler
     scheduler.init(main_loop, _on_reminder)
     scheduler.start_checker()
-    try:
-        from core.net import telegram_bot
-        telegram_bot.start()
-    except Exception as e:
-        log.warning(f"telegram start failed: {e}")
+    if DEFAULT_FEATURES.enabled("telegram"):
+        try:
+            from core.net import telegram_bot
+            telegram_bot.start()
+        except Exception as e:
+            log.warning(f"telegram start failed: {e}")
 
 
 _startup_audio = None
