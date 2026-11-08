@@ -17,6 +17,7 @@ import re
 import sqlite3
 import threading
 import time
+from pathlib import Path
 
 from core.security.canonical import canonical_json
 
@@ -164,6 +165,59 @@ def _entry_hash(event: dict) -> str:
 
 def _hmac_digest(key: bytes, entry_hash: str) -> str:
     return hmac.new(key, entry_hash.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _verify_rows(conn, key: bytes) -> bool:
+    """Recompute every row from the stored anchor; False on first mismatch.
+
+    Caller owns ``conn``'s row factory (must be ``sqlite3.Row``) and locking.
+    A missing ``audit`` or ``audit_meta`` table raises ``sqlite3.Error`` here
+    so the read-only path can treat it as tampering (never a re-creation).
+    """
+    row = conn.execute(
+        "SELECT value FROM audit_meta WHERE key = 'chain_anchor'"
+    ).fetchone()
+    running = row["value"] if row is not None else ZERO_ANCHOR
+    for row in conn.execute("SELECT * FROM audit ORDER BY id ASC"):
+        event = {column: row[column] for column in COLUMNS}
+        if event["prev_hash"] != running:
+            return False
+        expected = _entry_hash(event)
+        if not hmac.compare_digest(expected, row["entry_hash"]):
+            return False
+        mac = _hmac_digest(key, row["entry_hash"])
+        if not hmac.compare_digest(mac, row["hmac"]):
+            return False
+        running = row["entry_hash"]
+    return True
+
+
+def verify_chain_at(db_path, hmac_key) -> bool:
+    """Verify a stored chain read-only; False on missing/tampered/corrupt DBs.
+
+    Opens the database with ``mode=ro`` (never creates a writer) and never
+    runs schema DDL: a dropped table counts as tampering and returns False.
+    Used by the audit verification scripts, which must not touch the chain.
+    """
+    try:
+        uri = Path(os.path.abspath(os.fspath(db_path))).as_uri() + "?mode=ro"
+        key = bytes(hmac_key)
+    except (TypeError, ValueError, OSError):
+        return False
+    try:
+        conn = sqlite3.connect(uri, uri=True, isolation_level=None)
+    except sqlite3.Error:
+        return False
+    try:
+        conn.row_factory = sqlite3.Row
+        return _verify_rows(conn, key)
+    except (sqlite3.Error, TypeError, ValueError):
+        return False
+    finally:
+        try:
+            conn.close()
+        except sqlite3.Error:
+            pass
 
 
 class AuditLog:
@@ -371,19 +425,7 @@ class AuditLog:
     def verify_chain(self) -> bool:
         """Recompute every row from the stored anchor; False on first mismatch."""
         with _LOCK:
-            running = self._meta("chain_anchor") or ZERO_ANCHOR
-            for row in self._conn.execute("SELECT * FROM audit ORDER BY id ASC"):
-                event = {column: row[column] for column in COLUMNS}
-                if event["prev_hash"] != running:
-                    return False
-                expected = _entry_hash(event)
-                if not hmac.compare_digest(expected, row["entry_hash"]):
-                    return False
-                mac = _hmac_digest(self._key, row["entry_hash"])
-                if not hmac.compare_digest(mac, row["hmac"]):
-                    return False
-                running = row["entry_hash"]
-        return True
+            return _verify_rows(self._conn, self._key)
 
     def recent(self, limit: int = 20) -> list[dict]:
         """Newest *limit* rows in chronological order as dicts."""

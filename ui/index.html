@@ -16,14 +16,6 @@
 <div id="setupWizard" class="hidden" role="dialog" aria-label="Setup wizard">
     <div class="wizTitle" data-i18n="setup_title">J.A.R.V.I.S SETUP</div>
 
-    <div id="wizStep0" class="wizStep hidden" role="group" aria-label="Step 0: License key">
-        <div class="wizHeading" data-i18n="license_heading">ACTIVATE YOUR LICENSE</div>
-        <p class="hint" data-i18n="license_hint">Enter the license key you received with your purchase (format: JARV-XXXXX-XXXXX-XXXXX).</p>
-        <input type="text" id="licenseInput" placeholder="JARV-XXXXX-XXXXX-XXXXX-XXXXX" autocomplete="off" spellcheck="false" aria-label="License key" style="text-transform:uppercase">
-        <button id="activateLicenseBtn" class="wizBtn" data-i18n="activate">ACTIVATE</button>
-        <div id="licenseStatus" aria-live="polite"></div>
-    </div>
-
     <div id="wizStep1" class="wizStep" role="group" aria-label="Step 1: Terms of Use">
         <div class="wizHeading" data-i18n="terms_heading">1. Terms of Use</div>
         <div id="termsBox" role="document" aria-label="Terms of Use text">loading...</div>
@@ -110,6 +102,13 @@
             <option value="en">English</option>
             <option value="ar">العربية</option>
         </select>
+        <div class="settingsDivider"></div>
+        <div class="settingsRow"><span data-i18n="security_status">Security</span><span id="securityStatus">checking...</span></div>
+        <div class="settingsRow"><span data-i18n="active_grants">Active grants</span></div>
+        <div id="grantsList" class="securityList"></div>
+        <button id="auditResetBtn" class="danger hidden" data-i18n="reset_audit">ARCHIVE &amp; RESET AUDIT</button>
+        <div class="settingsRow"><span data-i18n="recent_audit">Recent security events</span></div>
+        <div id="recentAuditList" class="securityList"></div>
         <div class="settingsDivider"></div>
         <p class="hint">Version: <span id="versionLabel">...</span></p>
         <p class="hint" data-i18n="enroll_info">Enroll = say 3 short phrases. After that JARVIS only obeys this voice via wake word.</p>

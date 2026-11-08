@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import sys
+import threading
 import time
 
 import numpy as np
@@ -19,9 +20,11 @@ from core.stt import transcriber
 from core.tts import speaker
 from core.voiceid import voiceid
 from core.security.auth import ALLOWED_ORIGINS, LaunchToken, Session, SessionManager, origin_allowed
+from core.security.audit_maintenance import reset_audit
 from core.security.commands import CommandRouter
 from core.security.features import DEFAULT_FEATURES
 from core.security.http import TOKEN_HEADER, inject_token_meta, security_headers
+from core.security.policy import PolicyIntegrityError
 from core.security.runtime import build_runtime
 from core.security.voice_approval import VoiceApprovalProvider
 
@@ -49,6 +52,7 @@ _show_window_impl = None
 REPLACEMENT_GRACE_SECONDS = 0.5
 MAX_AUTH_ATTEMPTS = 3
 AUTH_ATTEMPT_TIMEOUT_SECONDS = 5.0
+_AUDIT_RESET_LOCK = threading.Lock()
 
 
 def set_show_window_callback(fn):
@@ -441,6 +445,148 @@ async def api_system_check():
 async def api_memory_stats():
     from core import memory
     return memory.stats()
+
+
+class AuditResetIn(BaseModel):
+    confirm: bool = False
+
+
+def _grant_payload(grant) -> dict:
+    return {
+        "grant_id": grant.grant_id,
+        "tool": grant.tool,
+        "scope": grant.scope,
+        "created_at": grant.created_at,
+        "expires_at": grant.expires_at,
+        "source": grant.source,
+    }
+
+
+@app.get("/api/security/status")
+async def api_security_status():
+    runtime = SECURITY
+    if runtime is None:
+        return JSONResponse(
+            status_code=503, content={"detail": "security runtime unavailable"}
+        )
+    return runtime.security_status()
+
+
+@app.get("/api/security/grants")
+async def api_security_grants():
+    runtime = SECURITY
+    policy = getattr(runtime, "policy", None) if runtime else None
+    if policy is None:
+        return {"grants": []}
+    try:
+        return {"grants": [_grant_payload(g) for g in policy.list_grants()]}
+    except Exception:
+        log.warning("grant listing failed", exc_info=True)
+        return JSONResponse(
+            status_code=503, content={"grants": [], "error": "policy_unavailable"}
+        )
+
+
+@app.post("/api/security/grants/{grant_id}/revoke")
+async def api_grant_revoke(grant_id: str):
+    runtime = SECURITY
+    policy = getattr(runtime, "policy", None) if runtime else None
+    if policy is None:
+        return JSONResponse(
+            status_code=404, content={"ok": False, "error": "not_found"}
+        )
+    try:
+        removed = policy.revoke_grant(grant_id)
+    except PolicyIntegrityError:
+        log.warning("grant revoke rejected: policy corrupt")
+        return JSONResponse(
+            status_code=409, content={"ok": False, "error": "policy_corrupt"}
+        )
+    except Exception:
+        log.warning("grant revoke failed", exc_info=True)
+        return JSONResponse(
+            status_code=500, content={"ok": False, "error": "policy_error"}
+        )
+    if not removed:
+        return JSONResponse(
+            status_code=404, content={"ok": False, "error": "not_found"}
+        )
+    # No extra audit write here: PolicyEngine.revoke_grant already appended
+    # ``policy.change`` with decision="revoke".
+    return {"ok": True}
+
+
+@app.post("/api/security/audit_reset")
+async def api_audit_reset(body: AuditResetIn):
+    global SECURITY, COMMAND_ROUTER
+    if body.confirm is not True:
+        return JSONResponse(
+            status_code=400, content={"ok": False, "error": "confirmation_required"}
+        )
+    if not _AUDIT_RESET_LOCK.acquire(blocking=False):
+        return JSONResponse(
+            status_code=409, content={"ok": False, "error": "reset_in_progress"}
+        )
+    try:
+        runtime = SECURITY
+        if runtime is None or runtime.status != "audit_locked":
+            return JSONResponse(
+                status_code=409, content={"ok": False, "error": "not_audit_locked"}
+            )
+        data_dir = os.fspath(SECURITY_BUILD_ARGS.get("data_dir") or "")
+        if not data_dir:
+            return JSONResponse(
+                status_code=500, content={"ok": False, "error": "reset_failed"}
+            )
+        old_runtime = runtime
+        try:
+            reset_result = reset_audit(
+                db_path=os.path.join(data_dir, "audit.db"),
+                key_path=os.path.join(data_dir, "audit.key"),
+                archive_dir=os.path.join(data_dir, "audit_archive"),
+                policy_path=os.path.join(data_dir, "security_policy.json"),
+                marker_path=os.path.join(data_dir, "audit_recovery.json"),
+            )
+            new_runtime = build_runtime(**SECURITY_BUILD_ARGS)
+        except Exception:
+            log.warning("audit reset failed; old runtime stays installed",
+                        exc_info=True)
+            return JSONResponse(
+                status_code=500, content={"ok": False, "error": "reset_failed"}
+            )
+        if new_runtime.status not in {"ok", "manifest_error"}:
+            new_audit = getattr(new_runtime, "audit", None)
+            if new_audit is not None:
+                try:
+                    new_audit.close()
+                except Exception:
+                    pass
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "ok": False,
+                    "error": "rebuild_failed",
+                    "status": new_runtime.status,
+                },
+            )
+        previous_router = COMMAND_ROUTER
+        try:
+            _install_security(new_runtime)
+        except Exception:
+            log.warning("audit reset install failed; restoring old runtime",
+                        exc_info=True)
+            try:
+                _install_security(old_runtime)
+            except Exception:
+                pass
+            SECURITY = old_runtime
+            COMMAND_ROUTER = previous_router
+            return JSONResponse(
+                status_code=500, content={"ok": False, "error": "install_failed"}
+            )
+        return {"ok": True, "status": new_runtime.status, **reset_result}
+    finally:
+        _AUDIT_RESET_LOCK.release()
 
 
 async def think_and_speak(user_text, speaker_name=None, source="ui", session_id=None):

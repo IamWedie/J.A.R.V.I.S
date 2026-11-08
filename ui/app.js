@@ -164,6 +164,23 @@ const I18N = {
         auth_failed: 'Authentication failed - access denied.',
         session_replaced: 'This window was replaced by another JARVIS window.',
         session_inactive: 'Session is no longer active.',
+        security_status: 'Security',
+        security_state: '{state} · {tools} tools',
+        active_grants: 'Active grants',
+        no_active_grants: 'No active grants',
+        recent_audit: 'Recent security events',
+        no_recent_events: 'No recent events',
+        expires: 'expires',
+        revoke: 'REVOKE',
+        reset_audit: 'ARCHIVE & RESET AUDIT',
+        confirm_revoke_grant: 'Revoke the "{tool}" grant? Every revocation is logged.',
+        confirm_audit_reset_1: 'This ARCHIVES the audit chain, key, and policy files and starts a new audit chain. Old grants must be re-approved. Continue?',
+        confirm_audit_reset_2: 'Archived material is never deleted, but a new key invalidates the old policy. RESET NOW?',
+        grant_revoked: 'Grant revoked',
+        audit_reset_done: 'Audit chain archived and reset',
+        audit_reset_failed: 'Audit reset failed',
+        security_unavailable: 'security unavailable',
+        security_load_failed: 'Could not load security details',
     },
     ar: {
         setup_title: 'إعداد جارفيس',
@@ -255,13 +272,30 @@ const I18N = {
         auth_failed: 'فشلت المصادقة - تم رفض الوصول.',
         session_replaced: 'استُبدل هذا النافذة بنافذة جارفيس أخرى.',
         session_inactive: 'الجلسة لم تعد فعّالة.',
+        security_status: 'الأمان',
+        security_state: '{state} · {tools} أدوات',
+        active_grants: 'المنح النشطة',
+        no_active_grants: 'لا توجد منح نشطة',
+        recent_audit: 'أحداث الأمان الأخيرة',
+        no_recent_events: 'لا أحداث حديثة',
+        expires: 'ينتهي',
+        revoke: 'إلغاء',
+        reset_audit: 'أرشفة وإعادة تعيين السجل',
+        confirm_revoke_grant: 'إلغاء منح "{tool}"؟ سيتم تسجيل كل عملية إلغاء.',
+        confirm_audit_reset_1: 'سيتم أرشفة سلسلة السجل والمفتاح وملفات السياسة وبدء سلسلة جديدة. يجب إعادة الموافقة على المنح القديمة. متابعة؟',
+        confirm_audit_reset_2: 'المواد المؤرشفة لا تُحذف أبداً، لكن المفتاح الجديد يُبطل السياسة القديمة. إعادة التعيين الآن؟',
+        grant_revoked: 'تم إلغاء المنح',
+        audit_reset_done: 'تمت أرشفة سلسلة السجل وإعادة تعيينها',
+        audit_reset_failed: 'فشلت إعادة تعيين السجل',
+        security_unavailable: 'الأمان غير متوفر',
+        security_load_failed: 'تعذر تحميل تفاصيل الأمان',
     },
 };
 
 let currentLang = 'en';
-function t(key, vars) {
+function t(key, vars, fallback) {
     const dict = I18N[currentLang] || I18N.en;
-    let s = dict[key] !== undefined ? dict[key] : (I18N.en[key] !== undefined ? I18N.en[key] : key);
+    let s = dict[key] !== undefined ? dict[key] : (I18N.en[key] !== undefined ? I18N.en[key] : (fallback !== undefined ? fallback : key));
     if (vars) { for (const k in vars) s = s.split('{' + k + '}').join(vars[k]); }
     return s;
 }
@@ -269,22 +303,26 @@ function t(key, vars) {
 function applyTranslations() {
     document.documentElement.lang = currentLang;
     document.documentElement.dir = currentLang === 'ar' ? 'rtl' : 'ltr';
-    if (currentLang !== 'en') {
-        document.querySelectorAll('[data-i18n]').forEach(el => {
-            const key = el.getAttribute('data-i18n');
-            const text = t(key);
-            if (el.querySelector('[data-i18n]')) {
-                el.childNodes.forEach(n => {
-                    if (n.nodeType === 3 && n.textContent.trim() !== '') n.textContent = text;
-                });
-            } else {
-                el.textContent = text;
-            }
-        });
-        document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-            el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
-        });
-    }
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        // Remember the original English text once so switching back to
+        // English restores it exactly.
+        if (el.dataset.i18nEn === undefined) el.dataset.i18nEn = el.textContent;
+        const text = t(key, null, el.dataset.i18nEn);
+        if (el.querySelector('[data-i18n]')) {
+            el.childNodes.forEach(n => {
+                if (n.nodeType === 3 && n.textContent.trim() !== '') n.textContent = text;
+            });
+        } else {
+            el.textContent = text;
+        }
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        if (el.dataset.i18nEnPlaceholder === undefined) {
+            el.dataset.i18nEnPlaceholder = el.placeholder;
+        }
+        el.placeholder = t(el.getAttribute('data-i18n-placeholder'), null, el.dataset.i18nEnPlaceholder);
+    });
     updateWakeBtn(wakeOn);
     updateVoiceStatus(voiceEnrolled);
 }
@@ -306,56 +344,18 @@ async function maybeRunSetup() {
     try {
         const r = await apiFetch('/api/setup_status');
         const d = await r.json();
-        if (d.setup_needed || d.license_needed) showWizard(d.license_needed);
+        // Personal build: no license step. The server may still report the
+        // legacy license flag for distribution builds; it is deliberately ignored.
+        if (d.setup_needed) showWizard();
     } catch {}
 }
 
-function showWizard(licenseNeeded) {
+function showWizard() {
     wizard.classList.remove('hidden');
-    if (licenseNeeded) {
-        // license gate first, before terms
-        document.getElementById('wizStep0').classList.remove('hidden');
-        document.getElementById('licenseInput').focus();
-        return;
-    }
     apiFetch('/api/terms').then(r => r.json()).then(d => {
         document.getElementById('termsBox').textContent = d.text;
     });
 }
-
-document.getElementById('activateLicenseBtn').addEventListener('click', async () => {
-    const key = document.getElementById('licenseInput').value.trim();
-    const status = document.getElementById('licenseStatus');
-    const btn = document.getElementById('activateLicenseBtn');
-    if (!key) { status.textContent = t('license_enter'); return; }
-    status.className = '';
-    status.innerHTML = '<span class="spinner"></span>' + t('activating');
-    btn.disabled = true;
-    try {
-        const r = await apiFetch('/api/license_activate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key }),
-        });
-        const d = await r.json();
-        if (!d.ok) {
-            status.textContent = d.error || t('license_invalid');
-            btn.disabled = false;
-            return;
-        }
-        status.className = 'ok';
-        status.textContent = t('license_valid');
-        document.getElementById('wizStep0').classList.add('hidden');
-        apiFetch('/api/terms').then(res => res.json()).then(dt => {
-            document.getElementById('termsBox').textContent = dt.text;
-        });
-        document.getElementById('wizStep1').classList.remove('hidden');
-        document.getElementById('agreeChk').focus();
-    } catch {
-        status.textContent = t('activating_failed');
-        btn.disabled = false;
-    }
-});
 
 document.getElementById('agreeChk').addEventListener('change', e => {
     document.getElementById('agreeBtn').disabled = !e.target.checked;
@@ -701,8 +701,9 @@ wakeBtn.addEventListener('click', () => send({ cmd: 'wake_toggle', enabled: !wak
 
 /* === SETTINGS === */
 settingsBtn.addEventListener('click', () => {
-    const open = settingsPanel.classList.toggle('hidden');
-    settingsBtn.setAttribute('aria-expanded', !open);
+    const hidden = settingsPanel.classList.toggle('hidden');
+    settingsBtn.setAttribute('aria-expanded', !hidden);
+    if (!hidden) loadSecurityPanel();
 });
 document.getElementById('enrollBtn').addEventListener('click', () => {
     setEnrollStatus(t('preparing'));
@@ -726,6 +727,151 @@ async function loadMemoryStats() {
             t('memory_remembered', { conversations: d.conversations, facts: d.facts });
     } catch {}
 }
+
+/* === SECURITY PANEL === */
+const securityStatusEl = document.getElementById('securityStatus');
+const grantsListEl = document.getElementById('grantsList');
+const recentAuditListEl = document.getElementById('recentAuditList');
+const auditResetBtn = document.getElementById('auditResetBtn');
+let securityLoadSeq = 0;
+
+function clearSecurityPanel() {
+    grantsListEl.textContent = '';
+    recentAuditListEl.textContent = '';
+    auditResetBtn.classList.add('hidden');
+}
+
+function fmtAuditTime(ts) {
+    const value = Number(ts);
+    return Number.isFinite(value)
+        ? new Date(value * 1000).toISOString().replace('T', ' ').slice(0, 19)
+        : '?';
+}
+
+function fmtGrantRow(grant) {
+    const parts = [grant.tool, '—', grant.scope];
+    if (Number.isFinite(Number(grant.expires_at))) {
+        parts.push(`(${t('expires')} ${new Date(Number(grant.expires_at) * 1000)
+            .toISOString().slice(0, 10)})`);
+    }
+    return parts.filter(p => p !== '' && p !== undefined).join(' ');
+}
+
+function renderGrantRow(grant) {
+    if (typeof grant.grant_id !== 'string' || !grant.grant_id) return null;
+    const item = document.createElement('div');
+    item.className = 'securityItem';
+    const label = document.createElement('span');
+    label.textContent = fmtGrantRow(grant);
+    item.appendChild(label);
+    if (typeof grant.tool === 'string' && grant.tool) {
+        const btn = document.createElement('button');
+        btn.textContent = t('revoke');
+        btn.setAttribute('aria-label', t('revoke') + ' ' + grant.tool);
+        btn.addEventListener('click', () => revokeGrant(grant.grant_id, grant.tool));
+        item.appendChild(btn);
+    }
+    return item;
+}
+
+async function revokeGrant(grantId, tool) {
+    if (typeof grantId !== 'string' || !grantId) return;
+    if (!confirm(t('confirm_revoke_grant', { tool: tool || grantId }))) return;
+    try {
+        const res = await apiFetch(
+            '/api/security/grants/' + encodeURIComponent(grantId) + '/revoke',
+            { method: 'POST' }
+        );
+        if (!res.ok) throw new Error('revoke_failed');
+        showToast(t('grant_revoked'), 'success');
+    } catch {
+        showToast(t('security_load_failed'), 'error');
+    }
+    loadSecurityPanel();
+}
+
+async function auditReset() {
+    if (!confirm(t('confirm_audit_reset_1'))) return;
+    if (!confirm(t('confirm_audit_reset_2'))) return;
+    auditResetBtn.disabled = true;
+    try {
+        const res = await apiFetch('/api/security/audit_reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm: true }),
+        });
+        if (!res.ok) throw new Error('reset_failed');
+        showToast(t('audit_reset_done'), 'success', 8000);
+    } catch {
+        showToast(t('audit_reset_failed'), 'error', 8000);
+    } finally {
+        auditResetBtn.disabled = false;
+    }
+    loadSecurityPanel();
+}
+
+async function loadSecurityPanel() {
+    const seq = ++securityLoadSeq;
+    clearSecurityPanel();
+    securityStatusEl.textContent = t('security_status');
+    try {
+        const [statusRes, grantsRes] = await Promise.all([
+            apiFetch('/api/security/status'),
+            apiFetch('/api/security/grants'),
+        ]);
+        const statusData = await statusRes.json();
+        const grantsData = await grantsRes.json();
+        if (seq !== securityLoadSeq) return; // stale; a newer load superseded it
+        if (!statusRes.ok || !grantsRes.ok) throw new Error('security_api_unavailable');
+
+        const state = statusData.status || 'unknown';
+        const tools = Array.isArray(statusData.tools) ? statusData.tools.length : 0;
+        securityStatusEl.textContent = t('security_state', { state, tools });
+        auditResetBtn.classList.toggle('hidden', state !== 'audit_locked');
+
+        recentAuditListEl.textContent = '';
+        const events = Array.isArray(statusData.recent_audit) ? statusData.recent_audit : [];
+        const latest = events.slice(-10).reverse(); // newest first
+        if (!latest.length) {
+            const empty = document.createElement('div');
+            empty.className = 'securityItem';
+            empty.textContent = t('no_recent_events');
+            recentAuditListEl.appendChild(empty);
+        } else {
+            for (const e of latest) {
+                const row = document.createElement('div');
+                row.className = 'securityItem';
+                const parts = [
+                    fmtAuditTime(e.ts),
+                    e.event_type || '?',
+                    e.tool || '',
+                    e.decision || '',
+                ].filter(p => p !== '');
+                row.textContent = parts.join(' · ');
+                recentAuditListEl.appendChild(row);
+            }
+        }
+
+        grantsListEl.textContent = '';
+        const grants = Array.isArray(grantsData.grants) ? grantsData.grants : [];
+        if (!grants.length) {
+            const empty = document.createElement('div');
+            empty.className = 'securityItem';
+            empty.textContent = t('no_active_grants');
+            grantsListEl.appendChild(empty);
+        } else {
+            for (const grant of grants) {
+                const row = renderGrantRow(grant);
+                if (row) grantsListEl.appendChild(row);
+            }
+        }
+    } catch {
+        clearSecurityPanel();
+        securityStatusEl.textContent = t('security_unavailable');
+    }
+}
+
+auditResetBtn.addEventListener('click', auditReset);
 
 /* === TTS === */
 const voiceSelect = document.getElementById('voiceSelect');
@@ -774,8 +920,9 @@ async function loadVersion() {
 /* === LANGUAGE === */
 const langSelect = document.getElementById('langSelect');
 langSelect.addEventListener('change', () => {
-    send({ cmd: 'set_language', lang: langSelect.value });
-    location.reload();
+    currentLang = langSelect.value;
+    applyTranslations();
+    send({ cmd: 'set_language', lang: currentLang });
 });
 
 /* === INIT === */

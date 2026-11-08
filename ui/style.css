@@ -348,6 +348,43 @@ body {
     line-height: 1.4;
 }
 
+.securityList {
+    margin-bottom: 8px;
+}
+
+.securityItem {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: #8fd8ff;
+    padding: 4px 2px;
+    border-bottom: 1px solid rgba(50, 110, 160, .2);
+    word-break: break-word;
+}
+
+/* Revoke buttons inside the security lists stay small and inline; this
+   overrides the full-width #settingsPanel button rule above. */
+#settingsPanel .securityItem button {
+    width: auto;
+    padding: 3px 8px;
+    margin-bottom: 0;
+    font-size: 10.5px;
+    letter-spacing: 1px;
+    flex-shrink: 0;
+    cursor: pointer;
+    background: rgba(20, 55, 85, .55);
+    border: 1px solid #2a6f9e;
+    border-radius: 6px;
+    color: #9fdcff;
+    font-family: inherit;
+}
+#settingsPanel .securityItem button:hover {
+    border-color: rgba(255, 100, 100, .45);
+    color: #ffb3b3;
+}
+
 #voiceSelect, #rateSelect {
     width: 100%;
     padding: 6px;

@@ -623,6 +623,10 @@ class PolicyEngine:
             return
         kwargs: dict = {
             "tool": grant.tool,
+            # Make the action explicit as a top-level signed/audited field,
+            # not only inside redacted args: grant -> "grant",
+            # revoke -> "revoke".
+            "decision": action,
             "args": {
                 "action": action,
                 "grant_id": grant.grant_id,
