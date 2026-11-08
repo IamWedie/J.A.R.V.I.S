@@ -51,6 +51,8 @@ datas = [
     ("CHANGELOG.md", "."),
     ("VERSION", "."),
     ("core/pubkeys.json", "core"),
+    ("core/security/tool_manifest.json", "core/security"),
+    ("core/security/tool_manifest.sig", "core/security"),
 ]
 datas += _model_datas()
 datas += collect_data_files("openwakeword")

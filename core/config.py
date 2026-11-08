@@ -3,7 +3,12 @@ import sys
 
 from dotenv import load_dotenv
 
+from core.logging_setup import get_logger
 from core.security.secrets import SECRET_KEYS, SecretStore
+
+log = get_logger("config")
+
+_acl_applied = False
 
 FROZEN = getattr(sys, "frozen", False)
 TEST_MODE = os.getenv("JARVIS_TEST_MODE") == "1"
@@ -19,6 +24,21 @@ def data_dir():
             base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     os.makedirs(base, exist_ok=True)
     return base
+
+
+def ensure_data_dir() -> str:
+    global _acl_applied
+    path = data_dir()
+    if not _acl_applied:
+        _acl_applied = True
+        if not TEST_MODE:
+            try:
+                from core.security.winacl import restrict_to_current_user
+
+                restrict_to_current_user(path)
+            except Exception as e:
+                log.warning("data directory ACL hardening failed: %s", e)
+    return path
 
 
 PROJECT_DIR = data_dir()

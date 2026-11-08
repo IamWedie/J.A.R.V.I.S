@@ -109,6 +109,8 @@ if __name__ == "__main__":
         log.warning("JARVIS is already running")
         sys.exit(0)
 
+    config.ensure_data_dir()
+
     set_app_user_model_id()
 
     if "--encrypt-env" in sys.argv:

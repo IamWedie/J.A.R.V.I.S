@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import sys
 import time
 
 import numpy as np
@@ -935,6 +936,12 @@ def _install_security(runtime):
     COMMAND_ROUTER = CommandRouter(runtime.audit, runtime.approvals, ServerActions())
 
 
+def _app_dir():
+    if config.FROZEN:
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return CODE_ROOT
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
@@ -1103,6 +1110,23 @@ async def _check_for_updates():
 async def startup():
     global main_loop
     _install_security(build_runtime(**SECURITY_BUILD_ARGS))
+    config.ensure_data_dir()
+    if config.FROZEN:
+        from core.security.data_migration import migrate_legacy_data
+
+        try:
+            copied = migrate_legacy_data(_app_dir(), config.data_dir())
+        except Exception as e:
+            log.warning("legacy data migration failed: %s", e)
+            copied = []
+        if copied:
+            _audit(
+                "data.migrated",
+                source="runtime",
+                tool="data_migration",
+                result_status="ok",
+                args={"items": copied},
+            )
     try:
         migrated = config.migrate_secrets()
     except Exception as e:

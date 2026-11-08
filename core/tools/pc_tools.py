@@ -12,7 +12,9 @@ import pyperclip
 import pygetwindow as gw
 from pycaw.pycaw import AudioUtilities
 
-SCREENSHOT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "screenshots")
+from core import config
+
+SCREENSHOT_DIR = os.path.join(config.data_dir(), "screenshots")
 
 USER_DIRS = {
     "desktop": ["Desktop"],
