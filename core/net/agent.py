@@ -5,7 +5,7 @@ import re
 import time
 
 from core.net.adb_controller import (
-    _shell, _shell_raw, _is_connected, connect_phone,
+    _is_connected, connect_phone,
     home, back, tap, swipe, swipe_up, swipe_down,
     type_text, open_app, current_activity,
     open_camera, take_photo, take_selfie, switch_camera, toggle_flash,
@@ -40,9 +40,7 @@ KNOWN_LAYOUTS = {
 
 
 def _get_current_package():
-    out = _shell_raw("dumpsys activity activities | grep -E 'ResumedActivity:'")
-    if not out:
-        out = _shell_raw("dumpsys activity activities | grep mResumedActivity")
+    out = current_activity()
     m = re.search(r"u0 (\S+?)/", out)
     return m.group(1) if m else ""
 
