@@ -348,6 +348,43 @@ body {
     line-height: 1.4;
 }
 
+.securityList {
+    margin-bottom: 8px;
+}
+
+.securityItem {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: #8fd8ff;
+    padding: 4px 2px;
+    border-bottom: 1px solid rgba(50, 110, 160, .2);
+    word-break: break-word;
+}
+
+/* Revoke buttons inside the security lists stay small and inline; this
+   overrides the full-width #settingsPanel button rule above. */
+#settingsPanel .securityItem button {
+    width: auto;
+    padding: 3px 8px;
+    margin-bottom: 0;
+    font-size: 10.5px;
+    letter-spacing: 1px;
+    flex-shrink: 0;
+    cursor: pointer;
+    background: rgba(20, 55, 85, .55);
+    border: 1px solid #2a6f9e;
+    border-radius: 6px;
+    color: #9fdcff;
+    font-family: inherit;
+}
+#settingsPanel .securityItem button:hover {
+    border-color: rgba(255, 100, 100, .45);
+    color: #ffb3b3;
+}
+
 #voiceSelect, #rateSelect {
     width: 100%;
     padding: 6px;
@@ -452,12 +489,55 @@ body {
     background: rgba(70, 40, 10, .35);
     border: 1px solid rgba(255, 170, 60, .45);
 }
+#approvalBox:focus-visible,
+.approvalButtons button:focus-visible {
+    outline: 2px solid rgba(100, 200, 255, .9);
+    outline-offset: 2px;
+}
+#approvalTitle {
+    font-size: 12px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #ffd9a0;
+    margin-bottom: 8px;
+}
 #approvalText {
     font-size: 13px;
     color: #ffd9a0;
     margin-bottom: 8px;
 }
-.approvalButtons { display: flex; gap: 8px; }
+#approvalRequestId {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 11px;
+    color: #7fa8c4;
+    margin-bottom: 6px;
+    word-break: break-all;
+}
+.approvalRisk {
+    font-size: 12px;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+}
+.risk-safe { color: #7dffc4; }
+.risk-guarded { color: #ffd9a0; }
+.risk-sensitive { color: #ffb347; }
+.risk-critical { color: #ff6b6b; }
+.risk-unknown { color: #7fa8c4; }
+#approvalCaps {
+    font-size: 12px;
+    color: #bfe6ff;
+    margin-bottom: 6px;
+    word-break: break-word;
+    white-space: normal;
+}
+#approvalScope {
+    font-size: 12px;
+    color: #d8b9ff;
+    margin-bottom: 8px;
+    word-break: break-word;
+    white-space: normal;
+}
+.approvalButtons { display: flex; gap: 8px; flex-wrap: wrap; }
 .approvalButtons button {
     flex: 1;
     padding: 8px;
@@ -476,6 +556,11 @@ button.deny {
     background: rgba(130, 30, 30, .35);
     border: 1px solid rgba(255, 100, 100, .45);
     color: #ffb3b3;
+}
+button.allowAlways {
+    background: linear-gradient(135deg, rgba(80, 60, 160, .55), rgba(40, 80, 140, .55));
+    border: 1px solid rgba(150, 130, 255, .6);
+    color: #d8ccff;
 }
 
 .inputrow {

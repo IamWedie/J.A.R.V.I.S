@@ -4,9 +4,9 @@ import sqlite3
 import threading
 from datetime import datetime
 
-from core.voiceid import data_dir
+import core.config as config
 
-DB_PATH = os.path.join(data_dir(), "memory.db")
+DB_PATH = os.path.join(config.data_dir(), "memory.db")
 _lock = threading.Lock()
 _local = threading.local()
 

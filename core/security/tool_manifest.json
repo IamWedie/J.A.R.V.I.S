@@ -1,0 +1,1046 @@
+{
+  "schema_version": 1,
+  "tools": [
+    {
+      "capabilities": [
+        "network.read"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/web_tools.py",
+          "sha256": "9635159162632181b6e450768fe9c892ce72603b5e03e0fe6b6bf6fc30b93747"
+        }
+      ],
+      "description": "Search the web with the fixed DuckDuckGo/Bing endpoint and return results.",
+      "egress_allowlist": [
+        "duckduckgo.com",
+        "html.duckduckgo.com",
+        "lite.duckduckgo.com",
+        "bing.com",
+        "www.bing.com",
+        "wttr.in"
+      ],
+      "enabled_by_default": true,
+      "feature": "web_search",
+      "handler": "core.tools.web_tools:web_search",
+      "lane": "egress",
+      "name": "web_search",
+      "parameters": {
+        "properties": {
+          "max_results": {
+            "description": "Maximum number of results to return.",
+            "type": "integer"
+          },
+          "query": {
+            "description": "Search query to send to the fixed search endpoint.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "risk": "guarded",
+      "timeout_seconds": 20,
+      "title": "Web search",
+      "version": "1.0.0"
+    },
+    {
+      "app_allowlist": [
+        "spotify",
+        "discord",
+        "steam",
+        "epic games launcher",
+        "visual studio code",
+        "notepad",
+        "calculator",
+        "settings",
+        "file explorer",
+        "google chrome",
+        "microsoft edge",
+        "firefox",
+        "microsoft word",
+        "microsoft excel",
+        "microsoft powerpoint",
+        "onenote",
+        "microsoft teams",
+        "zoom",
+        "battle.net",
+        "riot client",
+        "ea app",
+        "gog galaxy",
+        "ubisoft connect"
+      ],
+      "argument_scopes": {
+        "app": [
+          "query"
+        ]
+      },
+      "capabilities": [
+        "process.launch"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Launch an installed application by name from the Start Menu.",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:launch_app",
+      "lane": "core",
+      "name": "launch_app",
+      "parameters": {
+        "properties": {
+          "query": {
+            "description": "Application name to launch.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "risk": "guarded",
+      "timeout_seconds": 10,
+      "title": "Launch app",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "system.control"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Set the system output volume to a percentage level.",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:set_volume",
+      "lane": "core",
+      "name": "set_volume",
+      "parameters": {
+        "properties": {
+          "level": {
+            "description": "Volume level from 0 to 100.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "level"
+        ],
+        "type": "object"
+      },
+      "risk": "guarded",
+      "timeout_seconds": 5,
+      "title": "Set volume",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "system.read"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Read the current system output volume as a percentage.",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:get_volume",
+      "lane": "core",
+      "name": "get_volume",
+      "parameters": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "risk": "safe",
+      "timeout_seconds": 5,
+      "title": "Get volume",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "system.control"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Send a media playback key (play/pause, next, previous, stop, mute).",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:media_key",
+      "lane": "core",
+      "name": "media_key",
+      "parameters": {
+        "properties": {
+          "action": {
+            "description": "Media action: play_pause, next, previous, stop, or mute.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "risk": "guarded",
+      "timeout_seconds": 5,
+      "title": "Media key",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "system.read"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Report CPU, RAM, battery, and disk usage.",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:system_info",
+      "lane": "restricted",
+      "name": "system_info",
+      "parameters": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "risk": "safe",
+      "timeout_seconds": 10,
+      "title": "System info",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "system.read"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Rank running processes by memory or CPU usage.",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:top_processes",
+      "lane": "restricted",
+      "name": "top_processes",
+      "parameters": {
+        "properties": {
+          "limit": {
+            "description": "How many processes to list.",
+            "type": "integer"
+          },
+          "metric": {
+            "description": "Ranking metric: memory or cpu.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "risk": "safe",
+      "timeout_seconds": 10,
+      "title": "Top processes",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "system.read"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "List the names of running user applications.",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:list_running_apps",
+      "lane": "restricted",
+      "name": "list_running_apps",
+      "parameters": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "risk": "safe",
+      "timeout_seconds": 10,
+      "title": "List running apps",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "system.control"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/assistant_tools.py",
+          "sha256": "d5e4b37c2b790687a0071cd717d4ad755c9738f9a8ffeecf4dfbf025c4668037"
+        }
+      ],
+      "description": "Schedule a reminder after a number of minutes.",
+      "enabled_by_default": true,
+      "handler": "core.tools.assistant_tools:set_reminder",
+      "lane": "core",
+      "name": "set_reminder",
+      "parameters": {
+        "properties": {
+          "message": {
+            "description": "Reminder message to deliver.",
+            "type": "string"
+          },
+          "minutes": {
+            "description": "Minutes from now until the reminder fires.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "minutes",
+          "message"
+        ],
+        "type": "object"
+      },
+      "risk": "guarded",
+      "timeout_seconds": 5,
+      "title": "Set reminder",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "system.control"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/assistant_tools.py",
+          "sha256": "d5e4b37c2b790687a0071cd717d4ad755c9738f9a8ffeecf4dfbf025c4668037"
+        }
+      ],
+      "description": "Schedule an alarm at a clock time.",
+      "enabled_by_default": true,
+      "handler": "core.tools.assistant_tools:set_alarm",
+      "lane": "core",
+      "name": "set_alarm",
+      "parameters": {
+        "properties": {
+          "message": {
+            "description": "Optional alarm message.",
+            "type": "string"
+          },
+          "time": {
+            "description": "Alarm time in HH:MM format.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "time"
+        ],
+        "type": "object"
+      },
+      "risk": "guarded",
+      "timeout_seconds": 5,
+      "title": "Set alarm",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "system.read"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/assistant_tools.py",
+          "sha256": "d5e4b37c2b790687a0071cd717d4ad755c9738f9a8ffeecf4dfbf025c4668037"
+        }
+      ],
+      "description": "List pending reminders and alarms with time remaining.",
+      "enabled_by_default": true,
+      "handler": "core.tools.assistant_tools:list_reminders",
+      "lane": "core",
+      "name": "list_reminders",
+      "parameters": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "risk": "safe",
+      "timeout_seconds": 5,
+      "title": "List reminders",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "system.control"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/assistant_tools.py",
+          "sha256": "d5e4b37c2b790687a0071cd717d4ad755c9738f9a8ffeecf4dfbf025c4668037"
+        }
+      ],
+      "description": "Cancel pending reminders matching a keyword, or all of them.",
+      "enabled_by_default": true,
+      "handler": "core.tools.assistant_tools:cancel_reminder",
+      "lane": "core",
+      "name": "cancel_reminder",
+      "parameters": {
+        "properties": {
+          "keyword": {
+            "description": "Substring the reminder message must contain; empty cancels all.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "risk": "guarded",
+      "timeout_seconds": 5,
+      "title": "Cancel reminder",
+      "version": "1.0.0"
+    },
+    {
+      "argument_scopes": {
+        "filesystem": [
+          "location"
+        ]
+      },
+      "capabilities": [
+        "filesystem.read"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Search home folders for files matching a pattern.",
+      "enabled_by_default": true,
+      "filesystem_roots": [
+        "~/Desktop",
+        "~/Documents",
+        "~/Downloads",
+        "~/Pictures",
+        "~/Videos",
+        "~/Music"
+      ],
+      "handler": "core.tools.pc_tools:search_files",
+      "lane": "restricted",
+      "name": "search_files",
+      "parameters": {
+        "properties": {
+          "limit": {
+            "description": "Maximum number of matches to return.",
+            "type": "integer"
+          },
+          "location": {
+            "description": "Home subfolder to search; 'all' searches every home folder.",
+            "type": "string"
+          },
+          "pattern": {
+            "description": "Filename substring to match.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "type": "object"
+      },
+      "risk": "guarded",
+      "timeout_seconds": 25,
+      "title": "Search files",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "clipboard.read"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Read the current system clipboard text.",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:get_clipboard",
+      "lane": "privileged",
+      "name": "get_clipboard",
+      "parameters": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "privacy_notes": "Clipboard contents are privacy-sensitive: the text leaves the device when it is sent to the cloud model as part of the conversation.",
+      "risk": "sensitive",
+      "timeout_seconds": 5,
+      "title": "Get clipboard",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "clipboard.write"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Replace the system clipboard text.",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:set_clipboard",
+      "lane": "privileged",
+      "name": "set_clipboard",
+      "parameters": {
+        "properties": {
+          "text": {
+            "description": "Text to copy to the clipboard.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "privacy_notes": "Clipboard contents are privacy-sensitive: the text leaves the device when it is sent to the cloud model as part of the conversation.",
+      "risk": "sensitive",
+      "timeout_seconds": 5,
+      "title": "Set clipboard",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "window.control"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Minimize all open windows to show the desktop.",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:minimize_all_windows",
+      "lane": "privileged",
+      "name": "minimize_all_windows",
+      "parameters": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "risk": "guarded",
+      "timeout_seconds": 15,
+      "title": "Minimize all windows",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "window.control"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Bring the first window matching a title to the foreground.",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:focus_window",
+      "lane": "privileged",
+      "name": "focus_window",
+      "parameters": {
+        "properties": {
+          "title": {
+            "description": "Window title substring to focus.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "type": "object"
+      },
+      "risk": "guarded",
+      "timeout_seconds": 15,
+      "title": "Focus window",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "input.keyboard",
+        "clipboard.write"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Type text into the active window by clipboard paste.",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:type_text",
+      "lane": "privileged",
+      "name": "type_text",
+      "parameters": {
+        "properties": {
+          "text": {
+            "description": "Text to type into the active window.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "privacy_notes": "Typed text is privacy-sensitive: it is placed on the system clipboard, pasted into the active window, and the resulting conversation content is handled by the cloud model.",
+      "risk": "sensitive",
+      "timeout_seconds": 5,
+      "title": "Type text",
+      "version": "1.0.0"
+    },
+    {
+      "argument_scopes": {
+        "domain": [
+          "url"
+        ]
+      },
+      "capabilities": [
+        "network.read"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Open an allowlisted URL in the default web browser.",
+      "egress_allowlist": [
+        "google.com",
+        "www.google.com",
+        "youtube.com",
+        "www.youtube.com",
+        "wikipedia.org",
+        "en.wikipedia.org",
+        "github.com",
+        "stackoverflow.com",
+        "opencode.ai",
+        "chatgpt.com",
+        "claude.ai",
+        "spotify.com",
+        "open.spotify.com",
+        "netflix.com",
+        "www.netflix.com",
+        "twitch.tv",
+        "www.twitch.tv",
+        "discord.com",
+        "reddit.com",
+        "www.reddit.com"
+      ],
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:open_url",
+      "lane": "core",
+      "name": "open_url",
+      "parameters": {
+        "properties": {
+          "url": {
+            "description": "URL to open in the default browser.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "risk": "guarded",
+      "timeout_seconds": 20,
+      "title": "Open URL",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "screen.capture"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Capture the screen and save it as a PNG file.",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:take_screenshot",
+      "lane": "privileged",
+      "name": "take_screenshot",
+      "parameters": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "privacy_notes": "Screen captures are privacy-sensitive: the captured content leaves the device and is sent to the cloud model for vision.",
+      "risk": "sensitive",
+      "timeout_seconds": 15,
+      "title": "Take screenshot",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "screen.capture",
+        "screen.ocr"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Extract visible text from the screen with OCR.",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:ocr_screenshot",
+      "lane": "privileged",
+      "name": "ocr_screenshot",
+      "optional_dependency": "winocr",
+      "parameters": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "privacy_notes": "Screen captures are privacy-sensitive: the captured content leaves the device and is sent to the cloud model for vision.",
+      "risk": "sensitive",
+      "timeout_seconds": 20,
+      "title": "OCR screenshot",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "screen.capture",
+        "screen.ocr"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Describe the active window and visible screen text.",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:describe_screen",
+      "lane": "privileged",
+      "name": "describe_screen",
+      "optional_dependency": "winocr",
+      "parameters": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "privacy_notes": "Screen captures are privacy-sensitive: the captured content leaves the device and is sent to the cloud model for vision.",
+      "risk": "sensitive",
+      "timeout_seconds": 20,
+      "title": "Describe screen",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "memory.write"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/assistant_tools.py",
+          "sha256": "d5e4b37c2b790687a0071cd717d4ad755c9738f9a8ffeecf4dfbf025c4668037"
+        }
+      ],
+      "description": "Store a fact in long-term memory.",
+      "enabled_by_default": true,
+      "handler": "core.tools.assistant_tools:remember_fact",
+      "lane": "core",
+      "name": "remember_fact",
+      "parameters": {
+        "properties": {
+          "fact": {
+            "description": "Fact to store in long-term memory.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fact"
+        ],
+        "type": "object"
+      },
+      "risk": "guarded",
+      "timeout_seconds": 5,
+      "title": "Remember fact",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "memory.write"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/assistant_tools.py",
+          "sha256": "d5e4b37c2b790687a0071cd717d4ad755c9738f9a8ffeecf4dfbf025c4668037"
+        }
+      ],
+      "description": "Remove stored facts containing a substring.",
+      "enabled_by_default": true,
+      "handler": "core.tools.assistant_tools:forget_fact",
+      "lane": "core",
+      "name": "forget_fact",
+      "parameters": {
+        "properties": {
+          "substring": {
+            "description": "Substring; every fact containing it is removed.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "substring"
+        ],
+        "type": "object"
+      },
+      "risk": "sensitive",
+      "timeout_seconds": 5,
+      "title": "Forget fact",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "memory.read"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/assistant_tools.py",
+          "sha256": "d5e4b37c2b790687a0071cd717d4ad755c9738f9a8ffeecf4dfbf025c4668037"
+        }
+      ],
+      "description": "Recall stored facts and past conversation matching a query.",
+      "enabled_by_default": true,
+      "handler": "core.tools.assistant_tools:recall_memories",
+      "lane": "core",
+      "name": "recall_memories",
+      "parameters": {
+        "properties": {
+          "query": {
+            "description": "Words to match against facts and past conversation.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "privacy_notes": "Stored facts and past conversation excerpts are privacy-sensitive: they leave the device and are sent to the cloud model as context.",
+      "risk": "sensitive",
+      "timeout_seconds": 5,
+      "title": "Recall memories",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "network.read"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/assistant_tools.py",
+          "sha256": "d5e4b37c2b790687a0071cd717d4ad755c9738f9a8ffeecf4dfbf025c4668037"
+        }
+      ],
+      "description": "Build the morning briefing with weather, news, and reminders.",
+      "egress_allowlist": [
+        "duckduckgo.com",
+        "html.duckduckgo.com",
+        "lite.duckduckgo.com",
+        "bing.com",
+        "www.bing.com",
+        "wttr.in"
+      ],
+      "enabled_by_default": true,
+      "handler": "core.tools.assistant_tools:morning_briefing",
+      "lane": "core",
+      "name": "morning_briefing",
+      "parameters": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "risk": "guarded",
+      "timeout_seconds": 20,
+      "title": "Morning briefing",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "process.terminate"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Terminate a running application by executable name.",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:close_app",
+      "lane": "core",
+      "name": "close_app",
+      "parameters": {
+        "properties": {
+          "name": {
+            "description": "Executable or application name to terminate.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "risk": "sensitive",
+      "timeout_seconds": 10,
+      "title": "Close app",
+      "version": "1.0.0"
+    },
+    {
+      "argument_scopes": {
+        "filesystem": [
+          "path"
+        ]
+      },
+      "capabilities": [
+        "filesystem.delete"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Delete a file or folder within the home directories.",
+      "enabled_by_default": true,
+      "filesystem_roots": [
+        "~/Desktop",
+        "~/Documents",
+        "~/Downloads",
+        "~/Pictures",
+        "~/Videos",
+        "~/Music"
+      ],
+      "handler": "core.tools.pc_tools:delete_file",
+      "lane": "core",
+      "name": "delete_file",
+      "parameters": {
+        "properties": {
+          "path": {
+            "description": "File or folder path to delete (within home folders).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "risk": "sensitive",
+      "timeout_seconds": 5,
+      "title": "Delete file",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "system.power"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Lock the Windows session.",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:lock_screen",
+      "lane": "core",
+      "name": "lock_screen",
+      "parameters": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "risk": "sensitive",
+      "timeout_seconds": 5,
+      "title": "Lock screen",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "system.power"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Put the PC to sleep.",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:sleep_pc",
+      "lane": "core",
+      "name": "sleep_pc",
+      "parameters": {
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "risk": "sensitive",
+      "timeout_seconds": 5,
+      "title": "Sleep PC",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": [
+        "system.power"
+      ],
+      "code_files": [
+        {
+          "path": "core/tools/pc_tools.py",
+          "sha256": "85245761435796551c282c315cfd9315e845007abac95cb7c145e88c33afa6bf"
+        }
+      ],
+      "description": "Shut down, restart, cancel, hibernate, or sleep the PC.",
+      "enabled_by_default": true,
+      "handler": "core.tools.pc_tools:shutdown_pc",
+      "lane": "core",
+      "name": "shutdown_pc",
+      "parameters": {
+        "properties": {
+          "action": {
+            "description": "Action: shutdown, restart, cancel, hibernate, or sleep.",
+            "type": "string"
+          },
+          "timer": {
+            "description": "Delay in seconds before the action runs.",
+            "type": "integer"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "risk": "sensitive",
+      "timeout_seconds": 5,
+      "title": "Shutdown PC",
+      "version": "1.0.0"
+    }
+  ]
+}

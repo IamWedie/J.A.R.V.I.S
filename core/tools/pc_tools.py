@@ -12,12 +12,9 @@ import pyperclip
 import pygetwindow as gw
 from pycaw.pycaw import AudioUtilities
 
-SCREENSHOT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "screenshots")
+from core import config
 
-START_MENU_DIRS = [
-    os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "Microsoft", "Windows", "Start Menu", "Programs"),
-    os.path.join(os.environ.get("APPDATA", ""), "Microsoft", "Windows", "Start Menu", "Programs"),
-]
+SCREENSHOT_DIR = os.path.join(config.data_dir(), "screenshots")
 
 USER_DIRS = {
     "desktop": ["Desktop"],
@@ -28,65 +25,21 @@ USER_DIRS = {
     "music": ["Music"],
 }
 
-APP_ALIASES = {
-    "notepad": "notepad",
-    "calculator": "calc",
-    "paint": "mspaint",
-    "settings": "ms-settings:",
-    "task manager": "taskmgr",
-}
-
-_app_index = None
-
-
-def _index_start_menu():
-    global _app_index
-    if _app_index is not None:
-        return _app_index
-    index = []
-    for root_dir in START_MENU_DIRS:
-        for dirpath, dirnames, filenames in os.walk(root_dir):
-            for f in filenames:
-                if f.lower().endswith((".lnk", ".url")):
-                    index.append((os.path.splitext(f)[0], os.path.join(dirpath, f)))
-    _app_index = index
-    return index
-
 
 def _volume_interface():
     return AudioUtilities.GetSpeakers().EndpointVolume
 
 
 def launch_app(query):
-    query = str(query).strip().lower()
-    alias = APP_ALIASES.get(query)
-    if alias:
-        try:
-            subprocess.Popen(["cmd", "/c", "start", "", alias], shell=False)
-            return f"Opened {query}."
-        except Exception:
-            pass
-    index = _index_start_menu()
-    if not index:
-        return "No applications found in the Start Menu."
-    query_tokens = query.split()
-    scored = []
-    for name, path in index:
-        name_l = name.lower()
-        matches = sum(1 for t in query_tokens if t in name_l)
-        if matches == len(query_tokens):
-            scored.append((matches, -len(name_l), name, path))
-        elif matches > 0:
-            scored.append((matches * 10 - len(name_l) / 100.0, 0, name, path))
-    if not scored:
+    from core.security.apps import resolve_app
+    resolved = resolve_app(query)
+    if resolved is None:
         return f"No installed app found matching '{query}'."
-    scored.sort(reverse=True)
-    best_name, best_path = scored[0][2], scored[0][3]
     try:
-        os.startfile(best_path)
-        return f"Opened {best_name}."
-    except Exception as e:
-        return f"Could not open {best_name}: {e}"
+        os.startfile(resolved.target)
+    except OSError:
+        return f"Could not open {resolved.display_name}."
+    return f"Opened {resolved.display_name}."
 
 
 def close_app(name):

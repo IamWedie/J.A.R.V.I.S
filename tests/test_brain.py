@@ -10,19 +10,18 @@ def test_brain_instantiation():
     assert b is not None
     assert hasattr(b, "ask")
     assert hasattr(b, "model")
+    assert b.registry is None
+    assert b.broker is None
 
 
-def test_tools_defined():
-    from core.brain import TOOLS, TOOL_FUNCTIONS
-    assert isinstance(TOOLS, list)
-    assert len(TOOLS) > 50
-    assert isinstance(TOOL_FUNCTIONS, dict)
-    assert len(TOOL_FUNCTIONS) > 50
-
-
-def test_morning_briefing_tool():
-    from core.brain import TOOL_FUNCTIONS
-    assert "morning_briefing" in TOOL_FUNCTIONS
+def test_brain_configure():
+    from core.brain import Brain
+    registry = object()
+    broker = object()
+    b = Brain()
+    b.configure(registry, broker)
+    assert b.registry is registry
+    assert b.broker is broker
 
 
 def test_fallback_models():
@@ -46,8 +45,23 @@ def test_friendly_error_401():
     assert "setup wizard" in msg
 
 
-def test_friendly_error_ok():
+def test_friendly_error_429():
     from core.brain import Brain
     b = Brain()
     msg = b._friendly_error(Exception("Error code: 429 - rate limit"))
     assert "rate limit" in msg.lower()
+
+
+def test_build_system_prompt_lists_tools():
+    from core.brain import build_system_prompt
+
+    prompt = build_system_prompt(["set_volume", "get_volume", "get_volume", "", None, 42])
+    assert "get_volume" in prompt
+    assert "set_volume" in prompt
+    lowered = prompt.lower()
+    for forbidden in ("full laptop control", "phone", "chromecast", "net_send_message", "update"):
+        assert forbidden not in lowered
+    assert "Only use the tools provided." in prompt
+    empty = build_system_prompt([])
+    assert "No tools are currently available." in empty
+    assert build_system_prompt(None).endswith("No tools are currently available.")

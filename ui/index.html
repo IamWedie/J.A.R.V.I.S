@@ -16,14 +16,6 @@
 <div id="setupWizard" class="hidden" role="dialog" aria-label="Setup wizard">
     <div class="wizTitle" data-i18n="setup_title">J.A.R.V.I.S SETUP</div>
 
-    <div id="wizStep0" class="wizStep hidden" role="group" aria-label="Step 0: License key">
-        <div class="wizHeading" data-i18n="license_heading">ACTIVATE YOUR LICENSE</div>
-        <p class="hint" data-i18n="license_hint">Enter the license key you received with your purchase (format: JARV-XXXXX-XXXXX-XXXXX).</p>
-        <input type="text" id="licenseInput" placeholder="JARV-XXXXX-XXXXX-XXXXX-XXXXX" autocomplete="off" spellcheck="false" aria-label="License key" style="text-transform:uppercase">
-        <button id="activateLicenseBtn" class="wizBtn" data-i18n="activate">ACTIVATE</button>
-        <div id="licenseStatus" aria-live="polite"></div>
-    </div>
-
     <div id="wizStep1" class="wizStep" role="group" aria-label="Step 1: Terms of Use">
         <div class="wizHeading" data-i18n="terms_heading">1. Terms of Use</div>
         <div id="termsBox" role="document" aria-label="Terms of Use text">loading...</div>
@@ -111,7 +103,13 @@
             <option value="ar">العربية</option>
         </select>
         <div class="settingsDivider"></div>
-        <button id="updateBtn" class="update" aria-label="Check for updates" data-i18n="check_updates">CHECK FOR UPDATES</button>
+        <div class="settingsRow"><span data-i18n="security_status">Security</span><span id="securityStatus">checking...</span></div>
+        <div class="settingsRow"><span data-i18n="active_grants">Active grants</span></div>
+        <div id="grantsList" class="securityList"></div>
+        <button id="auditResetBtn" class="danger hidden" data-i18n="reset_audit">ARCHIVE &amp; RESET AUDIT</button>
+        <div class="settingsRow"><span data-i18n="recent_audit">Recent security events</span></div>
+        <div id="recentAuditList" class="securityList"></div>
+        <div class="settingsDivider"></div>
         <p class="hint">Version: <span id="versionLabel">...</span></p>
         <p class="hint" data-i18n="enroll_info">Enroll = say 3 short phrases. After that JARVIS only obeys this voice via wake word.</p>
     </div>
@@ -122,11 +120,18 @@
 
     <div id="chatlog" role="log" aria-label="Conversation history" aria-live="polite"></div>
 
-    <div id="approvalBox" class="hidden" role="alertdialog" aria-label="Approval required">
+    <div id="approvalBox" class="hidden" role="alertdialog" aria-modal="true"
+         aria-labelledby="approvalTitle" aria-describedby="approvalText" tabindex="-1">
+        <div id="approvalTitle" data-i18n="approval_title">Approval required</div>
         <div id="approvalText"></div>
+        <div id="approvalRequestId"></div>
+        <div id="approvalRisk" class="approvalRisk"></div>
+        <div id="approvalCaps" class="approvalCaps"></div>
+        <div id="approvalScope" class="approvalScope hidden"></div>
         <div class="approvalButtons">
             <button id="btnDeny" class="deny" aria-label="Deny request" data-i18n="deny">DENY</button>
-            <button id="btnApprove" class="approve" aria-label="Approve request" data-i18n="approve">APPROVE</button>
+            <button id="btnApprove" class="approve" aria-label="Approve once" data-i18n="approve">APPROVE</button>
+            <button id="btnAllowAlways" class="allowAlways hidden" aria-label="Always allow this scope" data-i18n="allow_always">ALLOW ALWAYS</button>
         </div>
     </div>
 

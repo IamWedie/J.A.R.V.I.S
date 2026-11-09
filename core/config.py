@@ -3,7 +3,16 @@ import sys
 
 from dotenv import load_dotenv
 
+from core.logging_setup import get_logger
+from core.security.secrets import SECRET_KEYS, SecretStore
+
+log = get_logger("config")
+
+_acl_applied = False
+
 FROZEN = getattr(sys, "frozen", False)
+TEST_MODE = os.getenv("JARVIS_TEST_MODE") == "1"
+WORKER_MODE = os.getenv("JARVIS_WORKER") == "1"
 
 
 def data_dir():
@@ -17,18 +26,35 @@ def data_dir():
     return base
 
 
+def ensure_data_dir() -> str:
+    global _acl_applied
+    path = data_dir()
+    if not _acl_applied:
+        _acl_applied = True
+        if not TEST_MODE:
+            try:
+                from core.security.winacl import restrict_to_current_user
+
+                restrict_to_current_user(path)
+            except Exception as e:
+                log.warning("data directory ACL hardening failed: %s", e)
+    return path
+
+
 PROJECT_DIR = data_dir()
 ENV_PATH = os.path.join(PROJECT_DIR, "config.env" if FROZEN else ".env")
-load_dotenv(ENV_PATH)
+if not WORKER_MODE:
+    load_dotenv(ENV_PATH)
 
-try:
-    from core.vault import load_vault
-    _vault = load_vault(ENV_PATH)
-    if _vault:
-        for k, v in _vault.items():
-            os.environ[k] = v
-except Exception:
-    pass
+if not WORKER_MODE:
+    try:
+        _vault = SecretStore(ENV_PATH + ".vault").all()
+        if _vault:
+            for k, v in _vault.items():
+                if not os.environ.get(k):
+                    os.environ[k] = v
+    except Exception:
+        pass
 
 ASSISTANT_NAME = "JARVIS"
 
@@ -93,10 +119,19 @@ PORT = 8741
 
 
 def save_settings(updates):
+    env_path = ENV_PATH
+    secret_updates = {k: v for k, v in updates.items() if k in SECRET_KEYS}
+    plain_updates = {k: v for k, v in updates.items() if k not in SECRET_KEYS}
+
+    if secret_updates:
+        store = SecretStore(env_path + ".vault")
+        for k, v in secret_updates.items():
+            store.set(k, str(v))
+
     lines = []
     existing = {}
-    if os.path.exists(ENV_PATH):
-        with open(ENV_PATH, "r", encoding="utf-8") as f:
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.rstrip("\n")
                 stripped = line.strip()
@@ -105,13 +140,40 @@ def save_settings(updates):
                     existing[k.strip()] = v.strip()
                 else:
                     lines.append(line)
-    for k, v in updates.items():
+    for k, v in plain_updates.items():
         existing[k] = str(v)
-    with open(ENV_PATH, "w", encoding="utf-8") as f:
-        for line in lines:
-            f.write(line + "\n")
-        for k, v in existing.items():
-            f.write(f"{k}={v}\n")
+    for k in secret_updates:
+        existing.pop(k, None)
+
+    import tempfile
+
+    env_dir = os.path.dirname(os.path.abspath(env_path)) or "."
+    os.makedirs(env_dir, exist_ok=True)
+    fd, temp_path = tempfile.mkstemp(dir=env_dir, prefix=".env-", suffix=".tmp")
+    try:
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                for line in lines:
+                    f.write(line + "\n")
+                for k, v in existing.items():
+                    f.write(f"{k}={v}\n")
+                f.flush()
+        except OSError:
+            raise
+        os.replace(temp_path, env_path)
+        temp_path = None
+    finally:
+        if temp_path is not None and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+
+
+def migrate_secrets():
+    from core.security.secrets import migrate_plaintext_secrets
+
+    return migrate_plaintext_secrets(ENV_PATH, ENV_PATH + ".vault")
 
 
 def validate_pin(pin):

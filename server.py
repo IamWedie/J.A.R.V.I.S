@@ -1,14 +1,17 @@
 import asyncio
 import json
 import os
+import sys
+import threading
 import time
 
 import numpy as np
 import sounddevice as sd
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from starlette.websockets import WebSocketState
 
 import core.config as config
 from core.brain import Brain, FRIENDLY_NAMES, is_free_model
@@ -16,7 +19,14 @@ from core.mic import mic, SAMPLE_RATE
 from core.stt import transcriber
 from core.tts import speaker
 from core.voiceid import voiceid
-from core.net import netmsg
+from core.security.auth import ALLOWED_ORIGINS, LaunchToken, Session, SessionManager, origin_allowed
+from core.security.audit_maintenance import reset_audit
+from core.security.commands import CommandRouter
+from core.security.features import DEFAULT_FEATURES
+from core.security.http import TOKEN_HEADER, inject_token_meta, security_headers
+from core.security.policy import PolicyIntegrityError
+from core.security.runtime import build_runtime
+from core.security.voice_approval import VoiceApprovalProvider
 
 from datetime import datetime
 from core.logging_setup import get_logger
@@ -26,14 +36,90 @@ log = get_logger("server")
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:8741", "http://localhost:8741"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=list(ALLOWED_ORIGINS),
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", TOKEN_HEADER],
 )
 
 UI_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
+LAUNCH_TOKEN = LaunchToken.generate()
+SESSIONS = SessionManager()
+CODE_ROOT = os.path.dirname(os.path.abspath(__file__))
+SECURITY = None
+SECURITY_BUILD_ARGS = {}
+COMMAND_ROUTER = None
+_show_window_impl = None
+REPLACEMENT_GRACE_SECONDS = 0.5
+MAX_AUTH_ATTEMPTS = 3
+AUTH_ATTEMPT_TIMEOUT_SECONDS = 5.0
+_AUDIT_RESET_LOCK = threading.Lock()
 
-clients = set()
+
+def set_show_window_callback(fn):
+    """Store the desktop window callback used by approval prompts."""
+    global _show_window_impl
+    _show_window_impl = fn if callable(fn) else None
+
+
+def _show_window():
+    impl = _show_window_impl
+    if impl is None:
+        return None
+    try:
+        return impl()
+    except Exception:
+        return None
+
+
+def _active_session_id() -> str:
+    active = SESSIONS.get_active()
+    if active is not None:
+        return active.session_id
+    return "local"
+
+
+def _audit(event_type, *, session_id=None, source="ws", **extra):
+    """Append one WS-boundary audit row; never blocks auth or disconnect."""
+    runtime = SECURITY
+    if runtime is None:
+        return
+    audit = getattr(runtime, "audit", None)
+    if audit is None:
+        return
+    try:
+        audit.append(event_type, session_id=session_id, source=source, **extra)
+    except Exception:
+        pass
+
+
+def _approvals_cancel(session_id, reason="session_closed"):
+    runtime = SECURITY
+    if runtime is None:
+        return
+    approvals = getattr(runtime, "approvals", None)
+    if approvals is None:
+        return
+    try:
+        approvals.cancel_session(session_id, reason)
+    except Exception:
+        pass
+
+
+@app.middleware("http")
+async def enforce_token_and_headers(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/api/") and path != "/api/health":
+        if not LAUNCH_TOKEN.matches(request.headers.get(TOKEN_HEADER)):
+            response = JSONResponse({"detail": "unauthorized"}, status_code=401)
+            for name, value in security_headers().items():
+                response.headers[name] = value
+            return response
+
+    response = await call_next(request)
+    for name, value in security_headers().items():
+        response.headers[name] = value
+    return response
+
 brain = Brain()
 processing_lock = asyncio.Lock()
 current_state = "idle"
@@ -78,7 +164,11 @@ async def play_chime():
 
 @app.get("/")
 async def index():
-    return FileResponse(os.path.join(UI_DIR, "index.html"), headers=NO_CACHE)
+    with open(os.path.join(UI_DIR, "index.html"), "r", encoding="utf-8") as f:
+        html = f.read()
+    return HTMLResponse(
+        inject_token_meta(html, LAUNCH_TOKEN.value), headers={"Cache-Control": "no-store"}
+    )
 
 
 @app.get("/style.css")
@@ -108,15 +198,14 @@ async def favicon():
 
 
 async def send_event(event):
-    dead = []
-    data = json.dumps(event)
-    for ws in list(clients):
-        try:
-            await ws.send_text(data)
-        except Exception:
-            dead.append(ws)
-    for ws in dead:
-        clients.discard(ws)
+    """Deliver an event to the single active control session; drop it otherwise."""
+    active = SESSIONS.get_active()
+    if active is None:
+        return
+    try:
+        await active.websocket.send_text(json.dumps(event))
+    except Exception:
+        pass
 
 
 async def set_state(value):
@@ -137,18 +226,8 @@ def update_wake_arm():
     mic.set_armed(eligible)
 
 
-class ApprovalIn(BaseModel):
-    approved: bool
-
-
 class ModelIn(BaseModel):
     model: str
-
-
-@app.post("/api/approve")
-async def api_approve(body: ApprovalIn):
-    brain.resolve_approval(body.approved)
-    return {"ok": True}
 
 
 @app.post("/api/model")
@@ -172,8 +251,11 @@ class SetupIn(BaseModel):
 
 @app.get("/api/setup_status")
 async def api_setup_status():
-    from core import license as license_mod
-    license_needed = _license_gate_active() and not license_mod.is_licensed()
+    if _license_disabled():
+        license_needed = False
+    else:
+        from core import license as license_mod
+        license_needed = _license_gate_active() and not license_mod.is_licensed()
     # In packaged (frozen) builds the installer's key is only trusted once validated
     # (ZEN_KEY_VALIDATED=1), so a bad/forged key can't bypass onboarding. Source
     # developers trust a present key directly.
@@ -189,6 +271,10 @@ def _license_gate_active():
     if not config.FROZEN:
         return False
     return True
+
+
+def _license_disabled():
+    return not DEFAULT_FEATURES.enabled("license_server")
 
 
 class LicenseIn(BaseModel):
@@ -241,6 +327,8 @@ def _auto_activate_license():
 
 @app.get("/api/license_status")
 async def api_license_status():
+    if _license_disabled():
+        return JSONResponse(status_code=404, content={"detail": "not found"})
     from core import license as license_mod
     if not _license_gate_active():
         return {"licensed": True, "gate": False}
@@ -249,6 +337,8 @@ async def api_license_status():
 
 @app.post("/api/license_activate")
 async def api_license_activate(body: LicenseIn):
+    if _license_disabled():
+        return JSONResponse(status_code=404, content={"detail": "not found"})
     from core import license as license_mod
     ok, reason = license_mod.activate(body.key)
     if not ok:
@@ -305,6 +395,11 @@ async def api_terms():
 
 @app.get("/api/health")
 async def api_health():
+    return {"ok": True}
+
+
+@app.get("/api/status")
+async def api_status():
     online = False
     try:
         import urllib.request
@@ -352,8 +447,151 @@ async def api_memory_stats():
     return memory.stats()
 
 
-async def think_and_speak(user_text, speaker_name=None, source="ui"):
+class AuditResetIn(BaseModel):
+    confirm: bool = False
+
+
+def _grant_payload(grant) -> dict:
+    return {
+        "grant_id": grant.grant_id,
+        "tool": grant.tool,
+        "scope": grant.scope,
+        "created_at": grant.created_at,
+        "expires_at": grant.expires_at,
+        "source": grant.source,
+    }
+
+
+@app.get("/api/security/status")
+async def api_security_status():
+    runtime = SECURITY
+    if runtime is None:
+        return JSONResponse(
+            status_code=503, content={"detail": "security runtime unavailable"}
+        )
+    return runtime.security_status()
+
+
+@app.get("/api/security/grants")
+async def api_security_grants():
+    runtime = SECURITY
+    policy = getattr(runtime, "policy", None) if runtime else None
+    if policy is None:
+        return {"grants": []}
+    try:
+        return {"grants": [_grant_payload(g) for g in policy.list_grants()]}
+    except Exception:
+        log.warning("grant listing failed", exc_info=True)
+        return JSONResponse(
+            status_code=503, content={"grants": [], "error": "policy_unavailable"}
+        )
+
+
+@app.post("/api/security/grants/{grant_id}/revoke")
+async def api_grant_revoke(grant_id: str):
+    runtime = SECURITY
+    policy = getattr(runtime, "policy", None) if runtime else None
+    if policy is None:
+        return JSONResponse(
+            status_code=404, content={"ok": False, "error": "not_found"}
+        )
+    try:
+        removed = policy.revoke_grant(grant_id)
+    except PolicyIntegrityError:
+        log.warning("grant revoke rejected: policy corrupt")
+        return JSONResponse(
+            status_code=409, content={"ok": False, "error": "policy_corrupt"}
+        )
+    except Exception:
+        log.warning("grant revoke failed", exc_info=True)
+        return JSONResponse(
+            status_code=500, content={"ok": False, "error": "policy_error"}
+        )
+    if not removed:
+        return JSONResponse(
+            status_code=404, content={"ok": False, "error": "not_found"}
+        )
+    # No extra audit write here: PolicyEngine.revoke_grant already appended
+    # ``policy.change`` with decision="revoke".
+    return {"ok": True}
+
+
+@app.post("/api/security/audit_reset")
+async def api_audit_reset(body: AuditResetIn):
+    global SECURITY, COMMAND_ROUTER
+    if body.confirm is not True:
+        return JSONResponse(
+            status_code=400, content={"ok": False, "error": "confirmation_required"}
+        )
+    if not _AUDIT_RESET_LOCK.acquire(blocking=False):
+        return JSONResponse(
+            status_code=409, content={"ok": False, "error": "reset_in_progress"}
+        )
+    try:
+        runtime = SECURITY
+        if runtime is None or runtime.status != "audit_locked":
+            return JSONResponse(
+                status_code=409, content={"ok": False, "error": "not_audit_locked"}
+            )
+        data_dir = os.fspath(SECURITY_BUILD_ARGS.get("data_dir") or "")
+        if not data_dir:
+            return JSONResponse(
+                status_code=500, content={"ok": False, "error": "reset_failed"}
+            )
+        old_runtime = runtime
+        try:
+            reset_result = reset_audit(
+                db_path=os.path.join(data_dir, "audit.db"),
+                key_path=os.path.join(data_dir, "audit.key"),
+                archive_dir=os.path.join(data_dir, "audit_archive"),
+                policy_path=os.path.join(data_dir, "security_policy.json"),
+                marker_path=os.path.join(data_dir, "audit_recovery.json"),
+            )
+            new_runtime = build_runtime(**SECURITY_BUILD_ARGS)
+        except Exception:
+            log.warning("audit reset failed; old runtime stays installed",
+                        exc_info=True)
+            return JSONResponse(
+                status_code=500, content={"ok": False, "error": "reset_failed"}
+            )
+        if new_runtime.status not in {"ok", "manifest_error"}:
+            new_audit = getattr(new_runtime, "audit", None)
+            if new_audit is not None:
+                try:
+                    new_audit.close()
+                except Exception:
+                    pass
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "ok": False,
+                    "error": "rebuild_failed",
+                    "status": new_runtime.status,
+                },
+            )
+        previous_router = COMMAND_ROUTER
+        try:
+            _install_security(new_runtime)
+        except Exception:
+            log.warning("audit reset install failed; restoring old runtime",
+                        exc_info=True)
+            try:
+                _install_security(old_runtime)
+            except Exception:
+                pass
+            SECURITY = old_runtime
+            COMMAND_ROUTER = previous_router
+            return JSONResponse(
+                status_code=500, content={"ok": False, "error": "install_failed"}
+            )
+        return {"ok": True, "status": new_runtime.status, **reset_result}
+    finally:
+        _AUDIT_RESET_LOCK.release()
+
+
+async def think_and_speak(user_text, speaker_name=None, source="ui", session_id=None):
     global _barge_in_text
+    session_id = session_id or _active_session_id()
     await set_state("thinking")
     if barge_in_enabled:
         mic.start_stream()
@@ -372,7 +610,7 @@ async def think_and_speak(user_text, speaker_name=None, source="ui"):
             asyncio.create_task(set_state("speaking"))
 
     try:
-        reply = await brain.ask(user_text, on_chunk=on_chunk, speaker=speaker_name, source="voice")
+        reply = await brain.ask(user_text, on_chunk=on_chunk, speaker=speaker_name, source=source, session_id=session_id)
     except Exception as e:
         await send_event({"type": "error", "message": str(e)})
         reply = "Sorry sir, something went wrong."
@@ -399,7 +637,7 @@ async def think_and_speak(user_text, speaker_name=None, source="ui"):
         _barge_in_text = None
         log.info(f"[barge] processing interrupted input: {interrupted_text}")
         await send_event({"type": "user_said", "text": interrupted_text})
-        await think_and_speak(interrupted_text, speaker_name=barge_speaker)
+        await think_and_speak(interrupted_text, speaker_name=barge_speaker, source="voice", session_id=session_id)
         return
 
     await set_state("idle")
@@ -431,7 +669,8 @@ async def capture_command():
     return audio
 
 
-async def voice_pipeline(play_intro):
+async def voice_pipeline(play_intro, session_id=None):
+    session_id = session_id or _active_session_id()
     async with processing_lock:
         speaker.stop()
         await set_state("listening")
@@ -467,24 +706,25 @@ async def voice_pipeline(play_intro):
             return
 
         await send_event({"type": "user_said", "text": user_text})
-        await think_and_speak(user_text, speaker_name=speaker_name, source="voice")
-        asyncio.create_task(follow_up_window())
+        await think_and_speak(user_text, speaker_name=speaker_name, source="voice", session_id=session_id)
+        asyncio.create_task(follow_up_window(session_id=session_id))
     update_wake_arm()
 
 
-async def text_flow(user_text):
+async def text_flow(user_text, session_id=None):
     if current_state != "idle":
         return
     await send_event({"type": "user_said", "text": user_text})
     async with processing_lock:
-        await think_and_speak(user_text)
+        await think_and_speak(user_text, source="ui", session_id=session_id or _active_session_id())
     update_wake_arm()
 
 
 CONVERSATION_FOLLOWUP = getattr(config, "CONVERSATION_TIMEOUT", 60)
 
 
-async def follow_up_window():
+async def follow_up_window(session_id=None):
+    session_id = session_id or _active_session_id()
     if mic.wake_enabled:
         return
     if CONVERSATION_FOLLOWUP <= 0:
@@ -536,7 +776,7 @@ async def follow_up_window():
     await send_event({"type": "user_said", "text": user_text})
     await send_event({"type": "state", "value": "listening"})
     async with processing_lock:
-        await think_and_speak(user_text, speaker_name=fu_speaker)
+        await think_and_speak(user_text, speaker_name=fu_speaker, source="voice", session_id=session_id)
     update_wake_arm()
 
 
@@ -598,7 +838,7 @@ async def safe_wake_pipeline():
     try:
         if current_state != "idle" or processing_lock.locked():
             return
-        await voice_pipeline(play_intro=True)
+        await voice_pipeline(play_intro=True, session_id=_active_session_id())
     except Exception as e:
         await send_event({"type": "error", "message": str(e)})
         await set_state("idle")
@@ -606,15 +846,92 @@ async def safe_wake_pipeline():
 
 async def level_broadcaster():
     while True:
-        if clients:
+        if SESSIONS.get_active() is not None:
             await send_event({"type": "level", "value": round(min(mic.level * 6, 1.0), 3)})
         await asyncio.sleep(0.09)
 
 
-@app.websocket("/ws")
-async def websocket_endpoint(ws: WebSocket):
-    await ws.accept()
-    clients.add(ws)
+_auth_failure_log_at = 0.0
+AUTH_FAILURE_LOG_INTERVAL = 10.0
+
+
+def _log_ws_auth_failure(reason: str, origin: str) -> None:
+    """Amortized auth-failure logging: at most one line per interval.
+
+    Only our own reason code and a printable, truncated Origin header are
+    written. The supplied token and the raw frame never reach the log."""
+    global _auth_failure_log_at
+    now = time.monotonic()
+    if now - _auth_failure_log_at < AUTH_FAILURE_LOG_INTERVAL:
+        return
+    _auth_failure_log_at = now
+    safe_origin = "".join(ch for ch in origin if ch.isprintable())[:120]
+    log.warning("ws auth rejected (reason=%s, origin=%s)", reason, safe_origin)
+
+
+async def _ws_handshake(ws: WebSocket) -> Session | None:
+    """Authenticate a fresh connection and open its single control session.
+
+    Returns the active session on success, or None when the caller must stop
+    (the socket is already closed with 1008 for a bad origin or a failed
+    handshake). The token value is never logged or echoed back."""
+    origin_header = ws.headers.get("origin", "")
+    if not origin_allowed(origin_header):
+        _log_ws_auth_failure("origin", origin_header)
+        _audit("auth.failure", error_code="origin")
+        await ws.close(code=1008)
+        return None
+
+    for _ in range(MAX_AUTH_ATTEMPTS):
+        msg = None
+        try:
+            raw = await asyncio.wait_for(
+                ws.receive_text(), timeout=AUTH_ATTEMPT_TIMEOUT_SECONDS
+            )
+            msg = json.loads(raw)
+        except (asyncio.TimeoutError, json.JSONDecodeError):
+            msg = None
+        if (
+            isinstance(msg, dict)
+            and msg.get("cmd") == "auth"
+            and LAUNCH_TOKEN.matches(str(msg.get("token", "")))
+        ):
+            session = SESSIONS.create(ws)
+            try:
+                previous = SESSIONS.activate(session)
+                if previous is not None and previous is not session:
+                    _approvals_cancel(previous.session_id, "session_closed")
+                    _audit("session.close", session_id=previous.session_id, result_status="ok")
+                    try:
+                        await previous.websocket.send_text(
+                            json.dumps({"type": "session_revoked"})
+                        )
+                    except Exception:
+                        pass
+                    await asyncio.sleep(REPLACEMENT_GRACE_SECONDS)
+                    try:
+                        await previous.websocket.close(code=4001)
+                    except Exception:
+                        pass
+                _audit("auth.success", session_id=session.session_id, result_status="ok")
+                _audit("session.open", session_id=session.session_id, result_status="ok")
+                await ws.send_text(json.dumps({
+                    "type": "auth_ok",
+                    "session_id": session.session_id,
+                    "protocol": 1,
+                }))
+            except BaseException:
+                SESSIONS.close(session.session_id)
+                raise
+            return session
+        _log_ws_auth_failure("credentials", origin_header)
+        _audit("auth.failure", error_code="credentials")
+        await ws.send_text(json.dumps({"type": "auth_error"}))
+    await ws.close(code=1008)
+    return None
+
+
+async def _ws_send_initial(ws: WebSocket) -> None:
     await ws.send_text(json.dumps({"type": "state", "value": current_state}))
     await ws.send_text(json.dumps({"type": "wake", "enabled": mic.wake_enabled}))
     await ws.send_text(json.dumps({"type": "voice_status", "enrolled": voiceid.enrolled}))
@@ -627,117 +944,209 @@ async def websocket_endpoint(ws: WebSocket):
             }))
     except Exception as e:
         log.warning(f"history send failed: {e}")
+
+
+def _safe_cmd(value) -> str:
+    """Printable, truncated rendering of an untrusted ``cmd`` value for logs."""
+    text = value if isinstance(value, str) else type(value).__name__
+    return "".join(ch for ch in text if ch.isprintable())[:64]
+
+
+class ServerActions:
+    """``CommandActions`` backed by the server's existing command logic.
+
+    Each method receives the raw command message; field extraction is the
+    same as the previous inline if/elif chain.
+    """
+
+    async def start_listen(self, msg):
+        if current_state == "listening" and mic.mode == "command":
+            mic.request_stop()
+        else:
+            asyncio.create_task(safe_voice_pipeline())
+
+    async def abort(self, msg):
+        mic.end_command_capture()
+        speaker.stop()
+
+    async def chat(self, msg):
+        text = (msg.get("text") or "").strip()
+        if text:
+            asyncio.create_task(text_flow(text, session_id=_active_session_id()))
+
+    async def set_model(self, msg):
+        brain.model = msg.get("model") or brain.model
+
+    async def reset(self, msg):
+        brain.reset_history()
+        await send_event({"type": "cleared"})
+
+    async def wake_toggle(self, msg):
+        try:
+            enabled = bool(msg.get("enabled"))
+            if enabled:
+                mic.enable_wake()
+            else:
+                mic.disable_wake()
+            update_wake_arm()
+            config.save_settings({"WAKE_ENABLED": "1" if enabled else "0"})
+            await send_event({"type": "wake", "enabled": mic.wake_enabled})
+        except Exception as e:
+            log.warning(f"wake toggle failed: {e}", exc_info=True)
+            await send_event({"type": "error", "message": f"Wake toggle failed: {e}"} )
+
+    async def tts_settings(self, msg):
+        try:
+            voice = msg.get("voice") or config.TTS_VOICE
+            rate = msg.get("rate") or config.TTS_RATE
+            config.TTS_VOICE = voice
+            config.TTS_RATE = rate
+            speaker.rate = None
+            config.save_settings({"TTS_VOICE": voice, "TTS_RATE": rate})
+            await send_event({"type": "tts_saved", "voice": voice, "rate": rate})
+        except Exception as e:
+            await send_event({"type": "error", "message": f"Voice settings failed: {e}"})
+
+    async def tts_test(self, msg):
+        asyncio.create_task(test_voice())
+
+    async def enroll(self, msg):
+        asyncio.create_task(safe_enroll_flow())
+
+    async def voice_reset(self, msg):
+        voiceid.reset()
+        await send_event({"type": "voice_status", "enrolled": False})
+
+    async def wipe_memory(self, msg):
+        try:
+            from core import memory
+            memory.wipe_memory()
+            brain.reset_history()
+            await send_event({"type": "cleared"})
+            await send_event({"type": "memory_wiped"})
+        except Exception as e:
+            await send_event({"type": "error", "message": f"Wipe failed: {e}"})
+
+    async def set_language(self, msg):
+        lang = msg.get("lang", "en")
+        from core.i18n import set_language
+        set_language(lang)
+        config.save_settings({"UI_LANG": lang})
+        await send_event({"type": "language_changed", "lang": lang})
+
+    async def unknown(self, msg):
+        log.info("WS: unknown command ignored: %s", _safe_cmd(msg.get("cmd")))
+
+
+class _SecurityAuditProxy:
+    """Lazily resolve ``SECURITY.audit`` for the voice approval provider."""
+
+    def append(self, *a, **kw):
+        runtime = SECURITY
+        audit = getattr(runtime, "audit", None) if runtime else None
+        return audit.append(*a, **kw) if audit is not None else None
+
+
+class ServerVoiceApprovalProvider(VoiceApprovalProvider):
+    """Server-wired voice approvals; not instantiated until Task 18."""
+
+    def __init__(self, audit=None):
+        super().__init__(
+            voiceid,
+            lambda audio: asyncio.to_thread(transcriber.transcribe_array, audio),
+            capture_command,
+            speaker.speak,
+            audit=audit,
+        )
+
+
+VOICE_APPROVAL_PROVIDER = ServerVoiceApprovalProvider(audit=_SecurityAuditProxy())
+
+SECURITY_BUILD_ARGS.update({
+    "token": LAUNCH_TOKEN,
+    "sessions": SESSIONS,
+    "data_dir": config.PROJECT_DIR,
+    "code_root": CODE_ROOT,
+    "frozen": config.FROZEN,
+    "dev_mode": config.TEST_MODE or os.getenv("JARVIS_DEV") == "1",
+    "notify": send_event,
+    "show_window": _show_window,
+    "voice_provider": VOICE_APPROVAL_PROVIDER,
+})
+
+
+def _install_security(runtime):
+    global SECURITY, COMMAND_ROUTER
+    SECURITY = runtime
+    brain.configure(runtime.registry, runtime.broker)
+    COMMAND_ROUTER = CommandRouter(runtime.audit, runtime.approvals, ServerActions())
+
+
+def _app_dir():
+    if config.FROZEN:
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return CODE_ROOT
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(ws: WebSocket):
+    await ws.accept()
+    session = None
     try:
+        session = await _ws_handshake(ws)
+        if session is None:
+            return
+        if COMMAND_ROUTER is None:
+            await ws.close(code=1011)
+            return
+        await _ws_send_initial(ws)
         while True:
             raw = await ws.receive_text()
+            if not SESSIONS.is_active(session.session_id):
+                await ws.send_text(json.dumps({"type": "session_inactive"}))
+                await ws.close(code=1008)
+                return
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:
                 continue
+            if not isinstance(msg, dict):
+                continue
 
-            cmd = msg.get("cmd")
-            if cmd == "listen":
-                if current_state == "listening" and mic.mode == "command":
-                    mic.request_stop()
-                else:
-                    asyncio.create_task(safe_voice_pipeline())
-            elif cmd == "abort":
-                mic.end_command_capture()
-                speaker.stop()
-            elif cmd == "chat":
-                text = (msg.get("text") or "").strip()
-                if text:
-                    asyncio.create_task(text_flow(text))
-            elif cmd == "approval":
-                log.info("WS: approval command received: %s", msg.get("approved"))
-                brain.resolve_approval(bool(msg.get("approved")))
-            elif cmd == "model":
-                brain.model = msg.get("model") or brain.model
-            elif cmd == "reset":
-                brain.reset_history()
-                await send_event({"type": "cleared"})
-            elif cmd == "wake_toggle":
+            result = await COMMAND_ROUTER.handle(session, msg)
+            if not result.ok:
+                log.info(
+                    "WS: command rejected (cmd=%s, code=%s)",
+                    _safe_cmd(msg.get("cmd")),
+                    result.error_code,
+                )
                 try:
-                    enabled = bool(msg.get("enabled"))
-                    if enabled:
-                        mic.enable_wake()
-                    else:
-                        mic.disable_wake()
-                    update_wake_arm()
-                    config.save_settings({"WAKE_ENABLED": "1" if enabled else "0"})
-                    await send_event({"type": "wake", "enabled": mic.wake_enabled})
-                except Exception as e:
-                    log.warning(f"wake toggle failed: {e}", exc_info=True)
-                    await send_event({"type": "error", "message": f"Wake toggle failed: {e}"} )
-            elif cmd == "tts_settings":
-                try:
-                    voice = msg.get("voice") or config.TTS_VOICE
-                    rate = msg.get("rate") or config.TTS_RATE
-                    config.TTS_VOICE = voice
-                    config.TTS_RATE = rate
-                    speaker.rate = None
-                    config.save_settings({"TTS_VOICE": voice, "TTS_RATE": rate})
-                    await send_event({"type": "tts_saved", "voice": voice, "rate": rate})
-                except Exception as e:
-                    await send_event({"type": "error", "message": f"Voice settings failed: {e}"})
-            elif cmd == "tts_test":
-                asyncio.create_task(test_voice())
-            elif cmd == "enroll":
-                asyncio.create_task(safe_enroll_flow())
-            elif cmd == "voice_reset":
-                voiceid.reset()
-                await send_event({"type": "voice_status", "enrolled": False})
-            elif cmd == "wipe_memory":
-                try:
-                    from core import memory
-                    memory.wipe_memory()
-                    brain.reset_history()
-                    await send_event({"type": "cleared"})
-                    await send_event({"type": "memory_wiped"})
-                except Exception as e:
-                    await send_event({"type": "error", "message": f"Wipe failed: {e}"})
-            elif cmd == "update_download":
-                async def _do_update():
-                    from core.updater import check_for_update, download_update, apply_zip_update
-                    await send_event({"type": "update_progress", "status": "checking"})
-                    info = await asyncio.to_thread(check_for_update)
-                    if not info:
-                        await send_event({"type": "error", "message": "No update available"})
-                        return
-                    await send_event({"type": "update_progress", "status": "downloading"})
-                    path = await asyncio.to_thread(download_update, info)
-                    if not path:
-                        await send_event({"type": "error", "message": "Download failed"})
-                        return
-                    if info.get("download_url", "").endswith(".zip"):
-                        ok = await asyncio.to_thread(apply_zip_update, info)
-                    else:
-                        from core.updater import install_update
-                        ok = await asyncio.to_thread(install_update, path)
-                    if ok:
-                        await send_event({"type": "update_progress", "status": "ready"})
-                        speaker.stop()
-                        await speaker.speak("Update downloaded. JARVIS will restart to apply it.")
-                    else:
-                        await send_event({"type": "error", "message": "Install failed"})
-                asyncio.create_task(_do_update())
-            elif cmd == "set_language":
-                lang = msg.get("lang", "en")
-                from core.i18n import set_language
-                set_language(lang)
-                config.save_settings({"UI_LANG": lang})
-                await send_event({"type": "language_changed", "lang": lang})
+                    await ws.send_text(json.dumps({
+                        "type": "error",
+                        "message": result.message or result.error_code or "command rejected",
+                    }))
+                except Exception:
+                    pass
     except WebSocketDisconnect:
         pass
     finally:
-        clients.discard(ws)
+        if session is not None:
+            _approvals_cancel(session.session_id, "session_closed")
+            if SESSIONS.is_active(session.session_id):
+                _audit("session.close", session_id=session.session_id, result_status="ok")
+            SESSIONS.close(session.session_id)
+        if ws.application_state == WebSocketState.CONNECTED:
+            try:
+                await ws.close()
+            except Exception:
+                pass
 
 
 async def safe_voice_pipeline():
     try:
         if current_state != "idle" or processing_lock.locked():
             return
-        await voice_pipeline(play_intro=True)
+        await voice_pipeline(play_intro=True, session_id=_active_session_id())
     except Exception as e:
         await send_event({"type": "error", "message": str(e)})
         await set_state("idle")
@@ -846,9 +1255,46 @@ async def _check_for_updates():
 @app.on_event("startup")
 async def startup():
     global main_loop
+    # Apply the data-directory ACL before the audit key/DB and policy file
+    # are created, so they inherit the restricted directory permissions.
+    config.ensure_data_dir()
+    _install_security(build_runtime(**SECURITY_BUILD_ARGS))
+    if config.FROZEN:
+        from core.security.data_migration import migrate_legacy_data
+
+        try:
+            copied = migrate_legacy_data(_app_dir(), config.data_dir())
+        except Exception as e:
+            log.warning("legacy data migration failed: %s", e)
+            copied = []
+        if copied:
+            _audit(
+                "data.migrated",
+                source="runtime",
+                tool="data_migration",
+                result_status="ok",
+                args={"items": copied},
+            )
+    try:
+        migrated = config.migrate_secrets()
+    except Exception as e:
+        log.warning("secret migration failed: %s", e)
+        migrated = []
+    if migrated:
+        _audit(
+            "secret.migrated",
+            source="runtime",
+            tool="secret_store",
+            result_status="ok",
+            args={"keys": sorted(migrated)},
+        )
+    if config.TEST_MODE:
+        return
     main_loop = asyncio.get_running_loop()
-    asyncio.create_task(_check_for_updates())
-    _auto_activate_license()
+    if DEFAULT_FEATURES.enabled("auto_update"):
+        asyncio.create_task(_check_for_updates())
+    if DEFAULT_FEATURES.enabled("license_server"):
+        _auto_activate_license()
     mic.on_wake = _on_wake_from_audio_thread
     if config.WAKE_ENABLED_DEFAULT:
         try:
@@ -860,16 +1306,20 @@ async def startup():
     asyncio.create_task(level_broadcaster())
     asyncio.create_task(startup_greeting())
     asyncio.create_task(away_watcher())
-    asyncio.create_task(phone_reconnect_watchdog())
-    netmsg.start_receiver()
+    if DEFAULT_FEATURES.enabled("phone"):
+        asyncio.create_task(phone_reconnect_watchdog())
+    if DEFAULT_FEATURES.enabled("lan_messaging"):
+        from core.net import netmsg
+        netmsg.start_receiver()
 
     async def _on_reminder(msg):
         await send_event({"type": "reminder", "message": msg})
-        try:
-            from core.net import telegram_bot
-            telegram_bot.telegram_notify(f"⏰ Reminder: {msg}")
-        except Exception:
-            pass
+        if DEFAULT_FEATURES.enabled("telegram"):
+            try:
+                from core.net import telegram_bot
+                telegram_bot.telegram_notify(f"⏰ Reminder: {msg}")
+            except Exception:
+                pass
         speaker.stop()
         await send_event({"type": "state", "value": "speaking"})
         await speaker.speak(f"Reminder: {msg}")
@@ -878,11 +1328,12 @@ async def startup():
     from core import scheduler
     scheduler.init(main_loop, _on_reminder)
     scheduler.start_checker()
-    try:
-        from core.net import telegram_bot
-        telegram_bot.start()
-    except Exception as e:
-        log.warning(f"telegram start failed: {e}")
+    if DEFAULT_FEATURES.enabled("telegram"):
+        try:
+            from core.net import telegram_bot
+            telegram_bot.start()
+        except Exception as e:
+            log.warning(f"telegram start failed: {e}")
 
 
 _startup_audio = None

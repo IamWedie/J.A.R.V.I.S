@@ -1,6 +1,7 @@
 import asyncio
 import ctypes
 import logging
+import multiprocessing
 import os
 import sys
 import threading
@@ -12,6 +13,7 @@ import webview
 
 import core.config as config
 from core.logging_setup import setup_logging, get_logger
+import server
 from server import app, brain
 
 log = get_logger("app")
@@ -99,6 +101,7 @@ def set_taskbar_icon():
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     setup_logging()
     log.info("JARVIS session starting")
 
@@ -106,12 +109,22 @@ if __name__ == "__main__":
         log.warning("JARVIS is already running")
         sys.exit(0)
 
+    config.ensure_data_dir()
+
     set_app_user_model_id()
 
     if "--encrypt-env" in sys.argv:
-        from core.vault import encrypt_env_file
-        encrypt_env_file(config.ENV_PATH)
-        print("Secrets encrypted. .env.vault created.")
+        from core.security.secrets import SecretMigrationError, migrate_plaintext_secrets
+
+        try:
+            migrated = migrate_plaintext_secrets()
+        except SecretMigrationError as e:
+            print(f"Secret migration failed: {e}")
+            sys.exit(1)
+        if migrated:
+            print(f"Secrets migrated: {', '.join(sorted(migrated))}")
+        else:
+            print("No plaintext secrets to migrate.")
         sys.exit(0)
 
     start_hidden = "--hidden" in sys.argv
@@ -130,6 +143,7 @@ if __name__ == "__main__":
         resizable=True,
         background_color="#070b14",
     )
+    server.set_show_window_callback(lambda: (window.show(), window.restore()))
 
     from tray import start_tray, on_window_close_request, set_pause_callback
     window.events.closing += on_window_close_request

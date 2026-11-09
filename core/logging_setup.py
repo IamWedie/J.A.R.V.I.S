@@ -4,6 +4,8 @@ import os
 import sys
 from logging.handlers import RotatingFileHandler
 
+from core.security.redaction import SecretRedactionFilter
+
 _configured = False
 
 
@@ -35,6 +37,10 @@ def setup_logging(log_dir=None, level=logging.INFO):
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(fmt)
     console_handler.setLevel(level)
+
+    redaction_filter = SecretRedactionFilter()
+    file_handler.addFilter(redaction_filter)
+    console_handler.addFilter(redaction_filter)
 
     root = logging.getLogger()
     root.setLevel(level)

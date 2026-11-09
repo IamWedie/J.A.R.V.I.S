@@ -3,12 +3,30 @@ let reconnectDelay = 1000;
 let reconnectTimer = null;
 const MAX_RECONNECT = 30000;
 
+const JARVIS_TOKEN = document.querySelector('meta[name="jarvis-token"]')?.content || "";
+let WSAUTHED = false;
+let wsSessionId = null;
+let authRejected = false;
+const pendingSends = [];
+function apiFetch(path, options = {}) {
+    const headers = new Headers(options.headers || {});
+    headers.set("X-JARVIS-Token", JARVIS_TOKEN);
+    return fetch(path, { ...options, headers });
+}
+
 const chatlog = document.getElementById('chatlog');
 const micBtn = document.getElementById('micBtn');
 const textInput = document.getElementById('textInput');
 const sendBtn = document.getElementById('sendBtn');
 const approvalBox = document.getElementById('approvalBox');
 const approvalText = document.getElementById('approvalText');
+const approvalRequestId = document.getElementById('approvalRequestId');
+const approvalRisk = document.getElementById('approvalRisk');
+const approvalCaps = document.getElementById('approvalCaps');
+const approvalScope = document.getElementById('approvalScope');
+const btnAllowAlways = document.getElementById('btnAllowAlways');
+const btnDenyEl = document.getElementById('btnDeny');
+let currentApproval = null;
 const modelSelect = document.getElementById('modelSelect');
 const wakeBtn = document.getElementById('wakeBtn');
 const settingsBtn = document.getElementById('settingsBtn');
@@ -17,6 +35,57 @@ const voiceStatusEl = document.getElementById('voiceStatus');
 
 const wizard = document.getElementById('setupWizard');
 let validatedKey = null;
+
+/* === APPROVAL (request-bound) === */
+function clearApproval() {
+    currentApproval = null;
+    approvalBox.classList.add('hidden');
+    delete approvalBox.dataset.requestId;
+    approvalRequestId.textContent = '';
+    approvalRisk.textContent = '';
+    approvalCaps.textContent = '';
+    approvalScope.textContent = '';
+    approvalScope.classList.add('hidden');
+    btnAllowAlways.classList.add('hidden');
+}
+function showApproval(msg) {
+    if (!msg || typeof msg !== 'object' || typeof msg.request_id !== 'string' || !msg.request_id) {
+        showToast(t('approval_invalid'), 'error', 8000);
+        return;
+    }
+    currentApproval = msg;
+    approvalBox.dataset.requestId = msg.request_id;
+    approvalText.textContent = t('approval_requires', { description: msg.description || '' });
+    approvalRequestId.textContent = t('approval_request_id', { id: msg.request_id });
+    const allowedRisks = ['safe', 'guarded', 'sensitive', 'critical'];
+    const risk = allowedRisks.includes(msg.risk) ? msg.risk : 'unknown';
+    approvalRisk.className = 'approvalRisk risk-' + risk;
+    approvalRisk.textContent = t('approval_risk', { risk: risk.toUpperCase() });
+    const caps = Array.isArray(msg.capabilities) ? msg.capabilities.filter(c => typeof c === 'string') : [];
+    const capsText = caps.length ? caps.join(', ') : '—';
+    approvalCaps.textContent = t('approval_caps', { caps: capsText });
+    if (msg.can_grant === true && typeof msg.grant_scope === 'string' && msg.grant_scope) {
+        approvalScope.textContent = t('approval_scope', { scope: msg.grant_scope });
+        approvalScope.classList.remove('hidden');
+        btnAllowAlways.classList.remove('hidden');
+    } else {
+        approvalScope.textContent = '';
+        approvalScope.classList.add('hidden');
+        btnAllowAlways.classList.add('hidden');
+    }
+    approvalBox.classList.remove('hidden');
+    btnDenyEl.focus();
+    showToast(t('action_requires_approval'), 'warning', 8000);
+}
+function sendApproval(decision) {
+    if (!currentApproval || typeof currentApproval.request_id !== 'string' || !currentApproval.request_id) {
+        clearApproval();
+        return;
+    }
+    const requestId = currentApproval.request_id;
+    clearApproval();
+    send({ cmd: 'approval_response', request_id: requestId, decision });
+}
 
 /* === TOAST SYSTEM === */
 function showToast(text, type = 'info', duration = 4000) {
@@ -82,17 +151,36 @@ const I18N = {
         error_prefix: 'Error: {message}',
         approval_requires: 'JARVIS wants to: {description}',
         action_requires_approval: 'Action requires approval',
-        update_available: 'Update available: v{latest} (you have v{current})',
-        new_version_available: 'A new version (v{latest}) is available. Click the update button in settings to download.',
-        checking_updates: 'Checking for updates...',
-        downloading_update: 'Downloading update...',
-        update_ready: 'Update ready — restarting...',
-        no_update: 'No update available',
-        update_download_failed: 'Download failed',
-        update_install_failed: 'Install failed',
+        approval_title: 'Approval required',
+        approval_request_id: 'Request: {id}',
+        approval_risk: 'Risk: {risk}',
+        approval_caps: 'Capabilities: {caps}',
+        approval_scope: 'Grant scope: {scope}',
+        allow_always: 'ALLOW ALWAYS',
+        approval_invalid: 'Ignored malformed approval request.',
         memory_remembered: '{conversations} messages remembered | {facts} facts',
         test: 'Testing voice...',
         confirm_wipe: 'Erase ALL memories and conversations permanently?',
+        auth_failed: 'Authentication failed - access denied.',
+        session_replaced: 'This window was replaced by another JARVIS window.',
+        session_inactive: 'Session is no longer active.',
+        security_status: 'Security',
+        security_state: '{state} · {tools} tools',
+        active_grants: 'Active grants',
+        no_active_grants: 'No active grants',
+        recent_audit: 'Recent security events',
+        no_recent_events: 'No recent events',
+        expires: 'expires',
+        revoke: 'REVOKE',
+        reset_audit: 'ARCHIVE & RESET AUDIT',
+        confirm_revoke_grant: 'Revoke the "{tool}" grant? Every revocation is logged.',
+        confirm_audit_reset_1: 'This ARCHIVES the audit chain, key, and policy files and starts a new audit chain. Old grants must be re-approved. Continue?',
+        confirm_audit_reset_2: 'Archived material is never deleted, but a new key invalidates the old policy. RESET NOW?',
+        grant_revoked: 'Grant revoked',
+        audit_reset_done: 'Audit chain archived and reset',
+        audit_reset_failed: 'Audit reset failed',
+        security_unavailable: 'security unavailable',
+        security_load_failed: 'Could not load security details',
     },
     ar: {
         setup_title: 'إعداد جارفيس',
@@ -121,7 +209,6 @@ const I18N = {
         forget_everything: 'مسح كل شيء',
         voice_speed: 'الصوت والسرعة',
         test_voice: 'اختبار الصوت',
-        check_updates: 'التحقق من التحديثات',
         no_internet: 'لا يوجد اتصال بالإنترنت — الميزات الصوتية والذكية غير متاحة',
         deny: 'رفض',
         approve: 'موافقة',
@@ -172,24 +259,43 @@ const I18N = {
         error_prefix: 'خطأ: {message}',
         approval_requires: 'جارفيس يريد: {description}',
         action_requires_approval: 'يتطلب هذا الإجراء موافقة',
-        update_available: 'تحديث متاح: v{latest} (عندك v{current})',
-        new_version_available: 'تتوفر نسخة جديدة (v{latest}). اضغط زر التحديث في الإعدادات للتحميل.',
-        checking_updates: 'جاري التحقق من التحديثات...',
-        downloading_update: 'جاري تحميل التحديث...',
-        update_ready: 'التحديث جاهز — جاري إعادة التشغيل...',
-        no_update: 'لا يوجد تحديث متاح',
-        update_download_failed: 'فشل التحميل',
-        update_install_failed: 'فشل التثبيت',
+        approval_title: 'مطلوب موافقة',
+        approval_request_id: 'طلب: {id}',
+        approval_risk: 'خطورة: {risk}',
+        approval_caps: 'القدرات: {caps}',
+        approval_scope: 'نطاق المنح: {scope}',
+        allow_always: 'السماح دائماً',
+        approval_invalid: 'تم تجاهل طلب موافقة غير صالح.',
         memory_remembered: '{conversations} رسائل | {facts} حقائق',
         test: 'جاري اختبار الصوت...',
         confirm_wipe: 'مسح جميع الذكريات والمحادثات نهائياً؟',
+        auth_failed: 'فشلت المصادقة - تم رفض الوصول.',
+        session_replaced: 'استُبدل هذا النافذة بنافذة جارفيس أخرى.',
+        session_inactive: 'الجلسة لم تعد فعّالة.',
+        security_status: 'الأمان',
+        security_state: '{state} · {tools} أدوات',
+        active_grants: 'المنح النشطة',
+        no_active_grants: 'لا توجد منح نشطة',
+        recent_audit: 'أحداث الأمان الأخيرة',
+        no_recent_events: 'لا أحداث حديثة',
+        expires: 'ينتهي',
+        revoke: 'إلغاء',
+        reset_audit: 'أرشفة وإعادة تعيين السجل',
+        confirm_revoke_grant: 'إلغاء منح "{tool}"؟ سيتم تسجيل كل عملية إلغاء.',
+        confirm_audit_reset_1: 'سيتم أرشفة سلسلة السجل والمفتاح وملفات السياسة وبدء سلسلة جديدة. يجب إعادة الموافقة على المنح القديمة. متابعة؟',
+        confirm_audit_reset_2: 'المواد المؤرشفة لا تُحذف أبداً، لكن المفتاح الجديد يُبطل السياسة القديمة. إعادة التعيين الآن؟',
+        grant_revoked: 'تم إلغاء المنح',
+        audit_reset_done: 'تمت أرشفة سلسلة السجل وإعادة تعيينها',
+        audit_reset_failed: 'فشلت إعادة تعيين السجل',
+        security_unavailable: 'الأمان غير متوفر',
+        security_load_failed: 'تعذر تحميل تفاصيل الأمان',
     },
 };
 
 let currentLang = 'en';
-function t(key, vars) {
+function t(key, vars, fallback) {
     const dict = I18N[currentLang] || I18N.en;
-    let s = dict[key] !== undefined ? dict[key] : (I18N.en[key] !== undefined ? I18N.en[key] : key);
+    let s = dict[key] !== undefined ? dict[key] : (I18N.en[key] !== undefined ? I18N.en[key] : (fallback !== undefined ? fallback : key));
     if (vars) { for (const k in vars) s = s.split('{' + k + '}').join(vars[k]); }
     return s;
 }
@@ -197,29 +303,33 @@ function t(key, vars) {
 function applyTranslations() {
     document.documentElement.lang = currentLang;
     document.documentElement.dir = currentLang === 'ar' ? 'rtl' : 'ltr';
-    if (currentLang !== 'en') {
-        document.querySelectorAll('[data-i18n]').forEach(el => {
-            const key = el.getAttribute('data-i18n');
-            const text = t(key);
-            if (el.querySelector('[data-i18n]')) {
-                el.childNodes.forEach(n => {
-                    if (n.nodeType === 3 && n.textContent.trim() !== '') n.textContent = text;
-                });
-            } else {
-                el.textContent = text;
-            }
-        });
-        document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-            el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
-        });
-    }
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        // Remember the original English text once so switching back to
+        // English restores it exactly.
+        if (el.dataset.i18nEn === undefined) el.dataset.i18nEn = el.textContent;
+        const text = t(key, null, el.dataset.i18nEn);
+        if (el.querySelector('[data-i18n]')) {
+            el.childNodes.forEach(n => {
+                if (n.nodeType === 3 && n.textContent.trim() !== '') n.textContent = text;
+            });
+        } else {
+            el.textContent = text;
+        }
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        if (el.dataset.i18nEnPlaceholder === undefined) {
+            el.dataset.i18nEnPlaceholder = el.placeholder;
+        }
+        el.placeholder = t(el.getAttribute('data-i18n-placeholder'), null, el.dataset.i18nEnPlaceholder);
+    });
     updateWakeBtn(wakeOn);
     updateVoiceStatus(voiceEnrolled);
 }
 
 async function loadLang() {
     try {
-        const r = await fetch('/api/language');
+        const r = await apiFetch('/api/language');
         const d = await r.json();
         currentLang = d.current || 'en';
         document.getElementById('langSelect').value = currentLang;
@@ -232,58 +342,20 @@ let voiceEnrolled = false;
 /* === SETUP WIZARD === */
 async function maybeRunSetup() {
     try {
-        const r = await fetch('/api/setup_status');
+        const r = await apiFetch('/api/setup_status');
         const d = await r.json();
-        if (d.setup_needed || d.license_needed) showWizard(d.license_needed);
+        // Personal build: no license step. The server may still report the
+        // legacy license flag for distribution builds; it is deliberately ignored.
+        if (d.setup_needed) showWizard();
     } catch {}
 }
 
-function showWizard(licenseNeeded) {
+function showWizard() {
     wizard.classList.remove('hidden');
-    if (licenseNeeded) {
-        // license gate first, before terms
-        document.getElementById('wizStep0').classList.remove('hidden');
-        document.getElementById('licenseInput').focus();
-        return;
-    }
-    fetch('/api/terms').then(r => r.json()).then(d => {
+    apiFetch('/api/terms').then(r => r.json()).then(d => {
         document.getElementById('termsBox').textContent = d.text;
     });
 }
-
-document.getElementById('activateLicenseBtn').addEventListener('click', async () => {
-    const key = document.getElementById('licenseInput').value.trim();
-    const status = document.getElementById('licenseStatus');
-    const btn = document.getElementById('activateLicenseBtn');
-    if (!key) { status.textContent = t('license_enter'); return; }
-    status.className = '';
-    status.innerHTML = '<span class="spinner"></span>' + t('activating');
-    btn.disabled = true;
-    try {
-        const r = await fetch('/api/license_activate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key }),
-        });
-        const d = await r.json();
-        if (!d.ok) {
-            status.textContent = d.error || t('license_invalid');
-            btn.disabled = false;
-            return;
-        }
-        status.className = 'ok';
-        status.textContent = t('license_valid');
-        document.getElementById('wizStep0').classList.add('hidden');
-        fetch('/api/terms').then(res => res.json()).then(dt => {
-            document.getElementById('termsBox').textContent = dt.text;
-        });
-        document.getElementById('wizStep1').classList.remove('hidden');
-        document.getElementById('agreeChk').focus();
-    } catch {
-        status.textContent = t('activating_failed');
-        btn.disabled = false;
-    }
-});
 
 document.getElementById('agreeChk').addEventListener('change', e => {
     document.getElementById('agreeBtn').disabled = !e.target.checked;
@@ -303,7 +375,7 @@ document.getElementById('validateKeyBtn').addEventListener('click', async () => 
     status.className = '';
     status.innerHTML = '<span class="spinner"></span>' + t('validating');
     btn.disabled = true;
-    const r = await fetch('/api/setup_validate', {
+    const r = await apiFetch('/api/setup_validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key }),
@@ -333,7 +405,7 @@ document.getElementById('validateKeyBtn').addEventListener('click', async () => 
 async function runSystemCheck() {
     const ids = { microphone: 'checkMic', speaker: 'checkSpeaker', internet: 'checkInternet', stt_model: 'checkSTT' };
     try {
-        const r = await fetch('/api/system_check');
+        const r = await apiFetch('/api/system_check');
         const d = await r.json();
         let allOk = true;
         for (const [key, elId] of Object.entries(ids)) {
@@ -369,7 +441,7 @@ document.getElementById('saveModelBtn').addEventListener('click', async () => {
     const btn = document.getElementById('saveModelBtn');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>' + t('saving');
-    await fetch('/api/setup_complete', {
+    await apiFetch('/api/setup_complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: validatedKey, model }),
@@ -432,10 +504,25 @@ function connect() {
     ws = new WebSocket(`ws://${location.host}/ws`);
     ws.onopen = () => {
         reconnectDelay = 1000;
-        document.getElementById('status').textContent = t('online');
+        WSAUTHED = false;
+        authRejected = false;
+        pendingSends.length = 0;
+        clearApproval();
+        ws.send(JSON.stringify({ cmd: 'auth', token: JARVIS_TOKEN }));
     };
     ws.onmessage = onMessage;
-    ws.onclose = () => {
+    ws.onclose = (e) => {
+        WSAUTHED = false;
+        clearApproval();
+        if (e && e.code === 4001) {
+            document.getElementById('status').textContent = t('session_replaced');
+            showToast(t('session_replaced'), 'warning', 10000);
+            return;
+        }
+        if (authRejected) {
+            document.getElementById('status').textContent = t('auth_failed');
+            return;
+        }
         document.getElementById('status').textContent = t('reconnecting');
         reconnectTimer = setTimeout(connect, reconnectDelay);
         reconnectDelay = Math.min(reconnectDelay * 1.5, MAX_RECONNECT);
@@ -448,6 +535,30 @@ function onMessage(ev) {
     try { msg = JSON.parse(ev.data); } catch { return; }
 
     switch (msg.type) {
+        case 'auth_ok':
+            WSAUTHED = true;
+            wsSessionId = msg.session_id;
+            document.getElementById('status').textContent = t('online');
+            while (pendingSends.length) {
+                const queued = pendingSends.shift();
+                if (ws && ws.readyState === 1) ws.send(JSON.stringify(queued));
+            }
+            break;
+        case 'auth_error':
+            WSAUTHED = false;
+            clearApproval();
+            if (!authRejected) showToast(t('auth_failed'), 'error', 8000);
+            authRejected = true;
+            break;
+        case 'session_revoked':
+            WSAUTHED = false;
+            clearApproval();
+            break;
+        case 'session_inactive':
+            WSAUTHED = false;
+            clearApproval();
+            showToast(t('session_inactive'), 'warning');
+            break;
         case 'state':
             setState(msg.value);
             micBtn.classList.toggle('listening', msg.value === 'listening');
@@ -472,10 +583,7 @@ function onMessage(ev) {
             }
             break;
         case 'approval_request':
-            approvalText.textContent = t('approval_requires', { description: msg.description });
-            approvalBox.classList.remove('hidden');
-            document.getElementById('btnApprove').focus();
-            showToast(t('action_requires_approval'), 'warning', 8000);
+            showApproval(msg);
             break;
         case 'cleared':
             chatlog.innerHTML = '';
@@ -525,15 +633,6 @@ function onMessage(ev) {
             addMsg(t('error_prefix', { message: msg.message }), 'jarvis');
             showToast(msg.message, 'error', 6000);
             break;
-        case 'update_available':
-            showToast(t('update_available', { latest: msg.latest, current: msg.current }), 'info', 10000);
-            addMsg(t('new_version_available', { latest: msg.latest }), 'jarvis');
-            break;
-        case 'update_progress':
-            if (msg.status === 'checking') showToast(t('checking_updates'), 'info', 3000);
-            else if (msg.status === 'downloading') showToast(t('downloading_update'), 'info', 10000);
-            else if (msg.status === 'ready') showToast(t('update_ready'), 'success');
-            break;
     }
 }
 
@@ -543,7 +642,10 @@ function updateWakeBtn(on) {
     wakeBtn.classList.toggle('on', on);
 }
 
-function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+function send(obj) {
+    if (!WSAUTHED) { pendingSends.push(obj); return; }
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+}
 
 function addMsg(text, who) {
     const div = document.createElement('div');
@@ -569,19 +671,14 @@ function submitText() {
 }
 
 /* === APPROVAL === */
-document.getElementById('btnApprove').addEventListener('click', () => {
-    approvalBox.classList.add('hidden');
-    send({ cmd: 'approval', approved: true });
-});
-document.getElementById('btnDeny').addEventListener('click', () => {
-    approvalBox.classList.add('hidden');
-    send({ cmd: 'approval', approved: false });
-});
+document.getElementById('btnApprove').addEventListener('click', () => sendApproval('allow'));
+document.getElementById('btnDeny').addEventListener('click', () => sendApproval('deny'));
+btnAllowAlways.addEventListener('click', () => sendApproval('allow_always'));
 
 /* === MODELS === */
 async function loadModels() {
     try {
-        const res = await fetch('/api/models');
+        const res = await apiFetch('/api/models');
         const data = await res.json();
         if (!data.models || !data.models.length) return;
         modelSelect.innerHTML = '';
@@ -604,8 +701,9 @@ wakeBtn.addEventListener('click', () => send({ cmd: 'wake_toggle', enabled: !wak
 
 /* === SETTINGS === */
 settingsBtn.addEventListener('click', () => {
-    const open = settingsPanel.classList.toggle('hidden');
-    settingsBtn.setAttribute('aria-expanded', !open);
+    const hidden = settingsPanel.classList.toggle('hidden');
+    settingsBtn.setAttribute('aria-expanded', !hidden);
+    if (!hidden) loadSecurityPanel();
 });
 document.getElementById('enrollBtn').addEventListener('click', () => {
     setEnrollStatus(t('preparing'));
@@ -623,12 +721,157 @@ document.getElementById('wipeMemoryBtn').addEventListener('click', () => {
 
 async function loadMemoryStats() {
     try {
-        const res = await fetch('/api/memory_stats');
+        const res = await apiFetch('/api/memory_stats');
         const d = await res.json();
         document.getElementById('memStats').textContent =
             t('memory_remembered', { conversations: d.conversations, facts: d.facts });
     } catch {}
 }
+
+/* === SECURITY PANEL === */
+const securityStatusEl = document.getElementById('securityStatus');
+const grantsListEl = document.getElementById('grantsList');
+const recentAuditListEl = document.getElementById('recentAuditList');
+const auditResetBtn = document.getElementById('auditResetBtn');
+let securityLoadSeq = 0;
+
+function clearSecurityPanel() {
+    grantsListEl.textContent = '';
+    recentAuditListEl.textContent = '';
+    auditResetBtn.classList.add('hidden');
+}
+
+function fmtAuditTime(ts) {
+    const value = Number(ts);
+    return Number.isFinite(value)
+        ? new Date(value * 1000).toISOString().replace('T', ' ').slice(0, 19)
+        : '?';
+}
+
+function fmtGrantRow(grant) {
+    const parts = [grant.tool, '—', grant.scope];
+    if (Number.isFinite(Number(grant.expires_at))) {
+        parts.push(`(${t('expires')} ${new Date(Number(grant.expires_at) * 1000)
+            .toISOString().slice(0, 10)})`);
+    }
+    return parts.filter(p => p !== '' && p !== undefined).join(' ');
+}
+
+function renderGrantRow(grant) {
+    if (typeof grant.grant_id !== 'string' || !grant.grant_id) return null;
+    const item = document.createElement('div');
+    item.className = 'securityItem';
+    const label = document.createElement('span');
+    label.textContent = fmtGrantRow(grant);
+    item.appendChild(label);
+    if (typeof grant.tool === 'string' && grant.tool) {
+        const btn = document.createElement('button');
+        btn.textContent = t('revoke');
+        btn.setAttribute('aria-label', t('revoke') + ' ' + grant.tool);
+        btn.addEventListener('click', () => revokeGrant(grant.grant_id, grant.tool));
+        item.appendChild(btn);
+    }
+    return item;
+}
+
+async function revokeGrant(grantId, tool) {
+    if (typeof grantId !== 'string' || !grantId) return;
+    if (!confirm(t('confirm_revoke_grant', { tool: tool || grantId }))) return;
+    try {
+        const res = await apiFetch(
+            '/api/security/grants/' + encodeURIComponent(grantId) + '/revoke',
+            { method: 'POST' }
+        );
+        if (!res.ok) throw new Error('revoke_failed');
+        showToast(t('grant_revoked'), 'success');
+    } catch {
+        showToast(t('security_load_failed'), 'error');
+    }
+    loadSecurityPanel();
+}
+
+async function auditReset() {
+    if (!confirm(t('confirm_audit_reset_1'))) return;
+    if (!confirm(t('confirm_audit_reset_2'))) return;
+    auditResetBtn.disabled = true;
+    try {
+        const res = await apiFetch('/api/security/audit_reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm: true }),
+        });
+        if (!res.ok) throw new Error('reset_failed');
+        showToast(t('audit_reset_done'), 'success', 8000);
+    } catch {
+        showToast(t('audit_reset_failed'), 'error', 8000);
+    } finally {
+        auditResetBtn.disabled = false;
+    }
+    loadSecurityPanel();
+}
+
+async function loadSecurityPanel() {
+    const seq = ++securityLoadSeq;
+    clearSecurityPanel();
+    securityStatusEl.textContent = t('security_status');
+    try {
+        const [statusRes, grantsRes] = await Promise.all([
+            apiFetch('/api/security/status'),
+            apiFetch('/api/security/grants'),
+        ]);
+        const statusData = await statusRes.json();
+        const grantsData = await grantsRes.json();
+        if (seq !== securityLoadSeq) return; // stale; a newer load superseded it
+        if (!statusRes.ok || !grantsRes.ok) throw new Error('security_api_unavailable');
+
+        const state = statusData.status || 'unknown';
+        const tools = Array.isArray(statusData.tools) ? statusData.tools.length : 0;
+        securityStatusEl.textContent = t('security_state', { state, tools });
+        auditResetBtn.classList.toggle('hidden', state !== 'audit_locked');
+
+        recentAuditListEl.textContent = '';
+        const events = Array.isArray(statusData.recent_audit) ? statusData.recent_audit : [];
+        const latest = events.slice(-10).reverse(); // newest first
+        if (!latest.length) {
+            const empty = document.createElement('div');
+            empty.className = 'securityItem';
+            empty.textContent = t('no_recent_events');
+            recentAuditListEl.appendChild(empty);
+        } else {
+            for (const e of latest) {
+                const row = document.createElement('div');
+                row.className = 'securityItem';
+                const parts = [
+                    fmtAuditTime(e.ts),
+                    e.event_type || '?',
+                    e.tool || '',
+                    e.decision || '',
+                ].filter(p => p !== '');
+                row.textContent = parts.join(' · ');
+                recentAuditListEl.appendChild(row);
+            }
+        }
+
+        grantsListEl.textContent = '';
+        const grants = Array.isArray(grantsData.grants) ? grantsData.grants : [];
+        if (!grants.length) {
+            const empty = document.createElement('div');
+            empty.className = 'securityItem';
+            empty.textContent = t('no_active_grants');
+            grantsListEl.appendChild(empty);
+        } else {
+            for (const grant of grants) {
+                const row = renderGrantRow(grant);
+                if (row) grantsListEl.appendChild(row);
+            }
+        }
+    } catch {
+        clearSecurityPanel();
+        securityStatusEl.textContent = t('security_unavailable');
+    }
+}
+
+auditResetBtn.addEventListener('click', auditReset);
 
 /* === TTS === */
 const voiceSelect = document.getElementById('voiceSelect');
@@ -665,13 +908,10 @@ document.getElementById('testVoiceBtn').addEventListener('click', () => {
     showToast(t('testing_voice'), 'info', 2000);
 });
 
-/* === UPDATE === */
-document.getElementById('updateBtn').addEventListener('click', () => {
-    send({ cmd: 'update_download' });
-});
+/* === VERSION === */
 async function loadVersion() {
     try {
-        const r = await fetch('/api/health');
+        const r = await apiFetch('/api/status');
         const d = await r.json();
         document.getElementById('versionLabel').textContent = 'v' + (d.version || '?');
     } catch {}
@@ -680,8 +920,9 @@ async function loadVersion() {
 /* === LANGUAGE === */
 const langSelect = document.getElementById('langSelect');
 langSelect.addEventListener('change', () => {
-    send({ cmd: 'set_language', lang: langSelect.value });
-    location.reload();
+    currentLang = langSelect.value;
+    applyTranslations();
+    send({ cmd: 'set_language', lang: currentLang });
 });
 
 /* === INIT === */
@@ -696,7 +937,7 @@ loadLang();
 const offlineBanner = document.getElementById('offlineBanner');
 async function checkHealth() {
     try {
-        const r = await fetch('/api/health');
+        const r = await apiFetch('/api/status');
         const d = await r.json();
         offlineBanner.classList.toggle('hidden', d.online);
     } catch {

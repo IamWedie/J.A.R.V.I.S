@@ -4,6 +4,7 @@ import wave
 
 import numpy as np
 
+from core import config
 from core.logging_setup import get_logger
 
 log = get_logger("voiceid")
@@ -13,14 +14,7 @@ MODEL_NAME = "redimnet-b2"
 
 
 def data_dir():
-    base = os.environ.get("JARVIS_DATA_DIR")
-    if not base:
-        if getattr(os, "frozen", False):
-            base = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "JARVIS")
-        else:
-            base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    os.makedirs(base, exist_ok=True)
-    return base
+    return config.data_dir()
 
 
 def trim_silence(wav, frame_ms=30, top_db=28):

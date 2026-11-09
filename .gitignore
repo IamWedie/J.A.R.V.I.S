@@ -12,6 +12,8 @@ license_server/*.db
 __pycache__/
 *.pyc
 venv/
+.venv/
+.pytest_cache/
 
 # Build artifacts
 build/
