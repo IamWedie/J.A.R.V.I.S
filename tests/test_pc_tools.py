@@ -25,10 +25,16 @@ def test_list_running_apps():
     assert len(apps) > 5
 
 
-def test_get_volume():
-    from core.tools.pc_tools import get_volume
-    vol = get_volume()
-    assert isinstance(vol, (str, int, float))
+def test_get_volume(monkeypatch):
+    from core.tools import pc_tools
+
+    class FakeVolume:
+        def GetMasterVolumeLevelScalar(self):
+            return 0.42
+
+    monkeypatch.setattr(pc_tools, "_volume_interface", lambda: FakeVolume())
+
+    assert pc_tools.get_volume() == 42
 
 
 def test_get_clipboard():
