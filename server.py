@@ -1255,8 +1255,10 @@ async def _check_for_updates():
 @app.on_event("startup")
 async def startup():
     global main_loop
-    _install_security(build_runtime(**SECURITY_BUILD_ARGS))
+    # Apply the data-directory ACL before the audit key/DB and policy file
+    # are created, so they inherit the restricted directory permissions.
     config.ensure_data_dir()
+    _install_security(build_runtime(**SECURITY_BUILD_ARGS))
     if config.FROZEN:
         from core.security.data_migration import migrate_legacy_data
 

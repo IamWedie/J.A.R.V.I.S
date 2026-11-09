@@ -115,7 +115,7 @@ does not exist.
   `[REDACTED]`, and everything else is truncated, so raw secrets never
   appear in the chain or in logs.
 
-- Retention: events older than **90 days** are pruned by the runtime;
+- Retention: at startup the runtime prunes events older than **90 days**;
   pruning re-anchors the chain so it stays verifiable.
 
 - **Tools:** `scripts/audit_verify.py` verifies a chain read-only (never
@@ -158,10 +158,12 @@ isolate file handles, nothing more.
 
 - Packaged (frozen) builds: `%LOCALAPPDATA%\JARVIS` (`audit.db`,
   `audit.key`, `security_policy.json`, vault DB, memories DB, settings).
-- Source runs: the repository `data/` directory (Path helpers in
-  `core/config.py`).
+- Source runs: the repository root (the directory containing
+  `server.py`, where `audit.db`, `audit.key`, `security_policy.json`, and
+  `.env` live; path helpers in `core/config.py`).
 - Secrets vault: DPAPI-encrypted store for API keys and the like, with
   ACLs best-effort limited to the current user.
 - On audit reset: the archived DB/key/policy land under
-  `%LOCALAPPDATA%\JARVIS\audit_archive\` (or the repo data dir) and are
-  never removed; `audit_recovery.json` records absolute paths.
+  `%LOCALAPPDATA%\JARVIS\audit_archive\` (or the source-run data
+  directory) and are never removed; `audit_recovery.json` records
+  absolute paths.

@@ -169,6 +169,10 @@ def build_runtime(
 
         audit = AuditLog(audit_db, key)
         audit.reconcile_incomplete()
+        # Retention is enforced at startup: the chain is re-anchored and one
+        # ``audit.pruned`` row records the cut.  A prune failure is an audit
+        # failure, so it falls through to the fail-closed runtime_error path.
+        audit.prune()
 
         try:
             manifest = verify_manifest(

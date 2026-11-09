@@ -1,11 +1,14 @@
 import json
 import os
 import sqlite3
+import time
+from pathlib import Path
 
 import pytest
 
 from core.security.audit import AuditLog, hash_args, redact_args
 from core.security import keystore
+from core.security.runtime import build_runtime
 
 KEY = os.urandom(32)
 
@@ -114,6 +117,36 @@ def test_partial_prune_keeps_chain_verifiable(tmp_path):
     assert survivors == ["s1", "s2"]
     assert log.verify_chain() is True
     log.close()
+
+def test_build_runtime_prunes_expired_events_at_startup(tmp_path):
+    key = keystore.load_or_create_key(tmp_path / "audit.key")
+    log = AuditLog(tmp_path / "audit.db", key)
+    log._insert(
+        "auth.success",
+        prev_hash=log._tip_or_anchor(),
+        ts=time.time() - 91 * 86400,
+    )
+    log.close()
+
+    runtime = build_runtime(
+        token=object(),
+        sessions=object(),
+        data_dir=tmp_path,
+        code_root=Path(__file__).parents[2],
+        frozen=False,
+        dev_mode=True,
+        notify=lambda event: None,
+        show_window=lambda: None,
+        voice_provider=None,
+    )
+    try:
+        assert runtime.status == "ok"
+        events = runtime.audit.recent(20)
+        assert all(row["event_type"] != "auth.success" for row in events)
+        assert any(row["event_type"] == "audit.pruned" for row in events)
+        assert runtime.audit.verify_chain() is True
+    finally:
+        runtime.audit.close()
 
 def test_nested_secret_keys_are_redacted():
     args = {"auth": {"token": "x"}, "apiKey": "y", "opts": [{"password": "z"}]}
