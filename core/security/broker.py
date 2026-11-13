@@ -36,6 +36,9 @@ from core.security.voice_approval import VoiceResult
 
 __all__ = ["ToolBroker", "ToolInvocation", "ToolResult"]
 
+DEFAULT_RESULT_LIMIT = 8000
+MAX_RESULT_LIMIT = 200_000
+
 
 @dataclass(frozen=True)
 class ToolInvocation:
@@ -105,7 +108,15 @@ class ToolBroker:
         except Exception:
             return None
 
-    async def invoke(self, invocation: ToolInvocation) -> ToolResult:
+    async def invoke(
+        self, invocation: ToolInvocation, *, result_limit: int = DEFAULT_RESULT_LIMIT
+    ) -> ToolResult:
+        if (
+            isinstance(result_limit, bool)
+            or not isinstance(result_limit, int)
+            or not 1 <= result_limit <= MAX_RESULT_LIMIT
+        ):
+            return ToolResult(False, "Invalid result limit.", "invalid_result_limit")
         # 1. Invocation validation (no registry/policy/approval/audit/lane work).
         tool = getattr(invocation, "tool", None)
         args = getattr(invocation, "args", None)
@@ -516,6 +527,6 @@ class ToolBroker:
                 text = json.dumps(value, ensure_ascii=False, default=str)
             except Exception:
                 text = "Done."
-        if len(text) > 8000:
-            text = text[:8000] + "\n...[truncated]"
+        if len(text) > result_limit:
+            text = text[:result_limit] + "\n...[truncated]"
         return ToolResult(True, text, None)

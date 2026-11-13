@@ -28,7 +28,7 @@ from core.security.tool_pubkeys import TRUSTED_TOOL_KEYS
 class _DenyBroker:
     """Broker that denies every tool call because no audit chain exists."""
 
-    async def invoke(self, invocation) -> ToolResult:
+    async def invoke(self, invocation, *, result_limit: int = 8000) -> ToolResult:
         return ToolResult(
             False,
             "Tool execution was blocked because the audit log is unavailable.",

@@ -470,3 +470,50 @@ async def test_sensitive_action_without_session_asks_for_window_and_denies(audit
     assert result.error_code == "approval_denied"
     assert result.content == "Approval was not granted."
     assert lanes.calls == []
+
+
+@pytest.mark.asyncio
+async def test_result_limit_default_truncates_at_8000(audit):
+    broker, *_ = make_broker(audit, lane_result="x" * 9000)
+    result = await broker.invoke(
+        ToolInvocation(tool="read_file", args={"path": "C:/tmp/a.txt"}, session_id="s1", source="ui")
+    )
+    assert result.ok is True
+    assert result.content == "x" * 8000 + "\n...[truncated]"
+
+
+@pytest.mark.asyncio
+async def test_result_limit_allows_full_study_payload(audit):
+    payload = "x" * 90000
+    broker, *_ = make_broker(audit, lane_result=payload)
+    result = await broker.invoke(
+        ToolInvocation(tool="read_file", args={"path": "C:/tmp/a.txt"}, session_id="s1", source="ui"),
+        result_limit=200_000,
+    )
+    assert result.ok is True
+    assert result.content == payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad", [200001, 0, -1, True, "8000", None])
+async def test_result_limit_rejects_invalid_values(audit, bad):
+    broker, registry, policy, approvals, lanes, notify_events, window_calls = make_broker(audit)
+    result = await broker.invoke(
+        ToolInvocation(tool="read_file", args={"path": "C:/tmp/a.txt"}, session_id="s1", source="ui"),
+        result_limit=bad,
+    )
+    assert result.ok is False
+    assert result.error_code == "invalid_result_limit"
+    assert lanes.calls == []
+
+
+@pytest.mark.asyncio
+async def test_deny_broker_accepts_result_limit():
+    from core.security.runtime import _DenyBroker
+
+    result = await _DenyBroker().invoke(
+        ToolInvocation(tool="study_extract", args={}, session_id="s1", source="ui"),
+        result_limit=200_000,
+    )
+    assert result.ok is False
+    assert result.error_code == "audit_unavailable"
