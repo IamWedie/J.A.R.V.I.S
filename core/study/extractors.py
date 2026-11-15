@@ -1,12 +1,14 @@
-"""Bounded extraction of text and code files inside the study workspace.
+"""Bounded extraction of text, code, and binary files inside the study workspace.
 
 The walker never leaves the requested root, never follows reparse points,
 and keeps the payload small enough for the signed study tool: at most
 ``MAX_FILES_HARD_CAP`` documents, ``MAX_TOTAL_CHARS`` characters of text,
 and ``MAX_SKIPPED_REPORTED`` skip entries.
 
-Binary formats (PDF, Office, images) are handled by the reader map that a
-later task fills in; until then they are reported as ``unsupported``.
+PDF, Word, PowerPoint, Excel, and image files are read by ``_BINARY_READERS``.
+A scanned PDF with no text layer and an image that cannot reach ``winocr``
+are reported as skips, not failures. Every parser is imported lazily inside
+its reader, so the dependencies stay optional at import time.
 """
 from __future__ import annotations
 
@@ -57,9 +59,6 @@ _EXCLUDED_NAMES = frozenset({
 # "hidden". Excluded names win when both match.
 _EXCLUDED_FILES = frozenset({"thumbs.db"})
 
-_BINARY_READERS: dict[str, Callable[[Path], "_Extracted"]] = {}
-
-
 @dataclass(frozen=True)
 class _Extracted:
     format: str
@@ -94,6 +93,129 @@ def _extract_one(path: Path) -> _Extracted:
     if reader is None:
         raise _Skip("unsupported")
     return reader(path)
+
+
+def _extract_pdf(path: Path) -> _Extracted:
+    import pypdf
+
+    reader = pypdf.PdfReader(str(path))
+    all_pages = list(reader.pages)
+    pages = all_pages[:MAX_PDF_PAGES]
+    text = "\n".join((page.extract_text() or "") for page in pages)
+    if not text.strip():
+        raise _Skip("no_text_layer")
+    return _Extracted("pdf", text, len(pages), len(all_pages) > MAX_PDF_PAGES)
+
+
+def _extract_docx(path: Path) -> _Extracted:
+    import docx
+
+    document = docx.Document(str(path))
+    parts = [paragraph.text for paragraph in document.paragraphs if paragraph.text]
+    for table in document.tables:
+        for row in table.rows:
+            parts.append("\t".join(cell.text for cell in row.cells))
+    text = "\n".join(parts)
+    if not text.strip():
+        raise _Skip("empty_text")
+    return _Extracted("docx", text)
+
+
+def _extract_pptx(path: Path) -> _Extracted:
+    import pptx
+
+    presentation = pptx.Presentation(str(path))
+    all_slides = list(presentation.slides)
+    slides = all_slides[:MAX_SLIDES]
+    parts = []
+    for slide in slides:
+        for shape in slide.shapes:
+            if getattr(shape, "has_text_frame", False):
+                parts.append(shape.text_frame.text)
+        try:
+            notes = slide.notes_slide.notes_text_frame.text
+        except Exception:
+            notes = ""
+        if notes:
+            parts.append(notes)
+    text = "\n".join(part for part in parts if part)
+    if not text.strip():
+        raise _Skip("empty_text")
+    return _Extracted("pptx", text, len(slides), len(all_slides) > MAX_SLIDES)
+
+
+def _extract_xlsx(path: Path) -> _Extracted:
+    import openpyxl
+
+    workbook = openpyxl.load_workbook(str(path), read_only=True, data_only=True)
+    try:
+        all_sheets = list(workbook.worksheets)
+        sheets = all_sheets[:MAX_SHEETS]
+        row_truncated = False
+        parts = []
+        for sheet in sheets:
+            parts.append(sheet.title)
+            for row_index, row in enumerate(sheet.iter_rows(values_only=True)):
+                if row_index >= MAX_ROWS:
+                    row_truncated = True
+                    break
+                parts.append("\t".join("" if value is None else str(value) for value in row))
+        text = "\n".join(parts)
+        if not text.strip():
+            raise _Skip("empty_text")
+        return _Extracted(
+            "xlsx", text, None, len(all_sheets) > MAX_SHEETS or row_truncated
+        )
+    finally:
+        workbook.close()
+
+
+def _ocr_image(path: str) -> str:
+    try:
+        import winocr
+    except Exception:
+        raise _Skip("ocr_unavailable") from None
+    try:
+        from PIL import Image
+
+        with Image.open(path) as image:
+            result = winocr.recognize_pil(image)
+            if hasattr(result, "__await__"):
+                import asyncio
+
+                result = asyncio.run(result)
+            if isinstance(result, dict):
+                text = result.get("text", "")
+            else:
+                text = getattr(result, "text", "")
+            return str(text or "")
+    except _Skip:
+        raise
+    except Exception:
+        raise _Skip("ocr_failed") from None
+
+
+def _extract_image(path: Path) -> _Extracted:
+    text = _ocr_image(str(path))
+    if not text.strip():
+        raise _Skip("empty_text")
+    return _Extracted("image", text)
+
+
+_BINARY_READERS: dict[str, Callable[[Path], _Extracted]] = {
+    ".pdf": _extract_pdf,
+    ".docx": _extract_docx,
+    ".pptx": _extract_pptx,
+    ".xlsx": _extract_xlsx,
+    ".xlsm": _extract_xlsx,
+    ".png": _extract_image,
+    ".jpg": _extract_image,
+    ".jpeg": _extract_image,
+    ".bmp": _extract_image,
+    ".webp": _extract_image,
+    ".tif": _extract_image,
+    ".tiff": _extract_image,
+}
 
 
 def _is_hidden(name: str) -> bool:
