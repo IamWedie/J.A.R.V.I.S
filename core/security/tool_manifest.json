@@ -1041,6 +1041,61 @@
       "timeout_seconds": 5,
       "title": "Shutdown PC",
       "version": "1.0.0"
+    },
+    {
+      "argument_scopes": {
+        "filesystem": [
+          "path"
+        ]
+      },
+      "capabilities": [
+        "filesystem.read"
+      ],
+      "code_files": [
+        {
+          "path": "core/study/extractors.py",
+          "sha256": "99d597c1d71b259f455d8d6ad1c73c0690d632d2805256f54d97e11acd433e18"
+        },
+        {
+          "path": "core/tools/study_tools.py",
+          "sha256": "58045ab0a68c4a30a2575db3d8229cdd25f331c5ffbda48cc87f91ea82e6b51b"
+        }
+      ],
+      "description": "Extract text from study files under Documents for flashcard and quiz generation.",
+      "enabled_by_default": true,
+      "feature": "study",
+      "filesystem_roots": [
+        "~/Documents"
+      ],
+      "handler": "core.tools.study_tools:extract_study_material",
+      "lane": "restricted",
+      "name": "study_extract",
+      "parameters": {
+        "properties": {
+          "max_files": {
+            "description": "Maximum number of files to read (1-40).",
+            "maximum": 40,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "path": {
+            "description": "Fully resolved absolute path under Documents.",
+            "type": "string"
+          },
+          "recursive": {
+            "description": "Walk subfolders.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "risk": "guarded",
+      "timeout_seconds": 120,
+      "title": "Extract study material",
+      "version": "1.0.0"
     }
   ]
 }

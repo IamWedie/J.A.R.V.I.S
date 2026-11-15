@@ -49,6 +49,7 @@ EXACT_CATALOGUE = frozenset(
         "lock_screen",
         "sleep_pc",
         "shutdown_pc",
+        "study_extract",
     }
 )
 
@@ -91,13 +92,13 @@ def test_bundle_verifies_with_compiled_key():
         dev_mode=False,
     )
     assert manifest.verified is True
-    assert len(manifest.tools) == 31
+    assert len(manifest.tools) == 32
 
 
 def test_bundle_contains_exact_secure_core_catalogue():
     manifest = _manifest()
     assert set(manifest.tools) == EXACT_CATALOGUE
-    assert len(manifest.tools) == 31
+    assert len(manifest.tools) == 32
 
 
 def test_bundle_excludes_disabled_features():
@@ -109,7 +110,7 @@ def test_bundle_excludes_disabled_features():
     features = {
         name: spec.feature for name, spec in manifest.tools.items() if spec.feature
     }
-    assert features == {"web_search": "web_search"}
+    assert features == {"web_search": "web_search", "study_extract": "study"}
 
 
 def test_every_tool_risk_covers_its_capabilities():
@@ -143,6 +144,21 @@ def test_scoped_tools_declare_allowlists():
 
     briefing = manifest.tools["morning_briefing"]
     assert list(briefing.egress_allowlist) == FIXED_ENDPOINT_EGRESS
+
+    study = manifest.tools["study_extract"]
+    assert list(study.filesystem_roots) == ["~/Documents"]
+    assert study.argument_scopes == {"filesystem": ["path"]}
+    assert study.lane == "restricted"
+    assert study.risk == "guarded"
+    assert study.feature == "study"
+
+
+def test_study_tool_is_manifest_covered():
+    study = _manifest().tools["study_extract"]
+    assert {item.path for item in study.code_files} == {
+        "core/study/extractors.py",
+        "core/tools/study_tools.py",
+    }
 
 
 def test_assistant_adapters_are_callable():
