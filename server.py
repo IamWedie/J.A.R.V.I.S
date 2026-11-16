@@ -4,6 +4,7 @@ import os
 import sys
 import threading
 import time
+import uuid
 
 import numpy as np
 import sounddevice as sd
@@ -30,6 +31,8 @@ from core.security.voice_approval import VoiceApprovalProvider
 
 from datetime import datetime
 from core.logging_setup import get_logger
+from core.study.service import StudyService
+from core.study.store import StudyStore, StudyStoreError, study_db_path
 
 log = get_logger("server")
 
@@ -48,6 +51,7 @@ CODE_ROOT = os.path.dirname(os.path.abspath(__file__))
 SECURITY = None
 SECURITY_BUILD_ARGS = {}
 COMMAND_ROUTER = None
+STUDY_SERVICE = None
 _show_window_impl = None
 REPLACEMENT_GRACE_SECONDS = 0.5
 MAX_AUTH_ATTEMPTS = 3
@@ -103,6 +107,34 @@ def _approvals_cancel(session_id, reason="session_closed"):
         approvals.cancel_session(session_id, reason)
     except Exception:
         pass
+
+
+def _study_op_id(msg) -> str:
+    """Echo a valid client op_id or mint one; never trust the value."""
+    value = msg.get("op_id") if isinstance(msg, dict) else None
+    if isinstance(value, str) and value and len(value) <= 64:
+        return value
+    return uuid.uuid4().hex
+
+
+async def _study_cancel(session_id: str) -> None:
+    """Drop a session's scan cache and cancel its tracked study task."""
+    service = STUDY_SERVICE
+    if service is None:
+        return
+    try:
+        await service.cancel(session_id)
+    except Exception:
+        pass
+
+
+async def _close_ws_session(session: Session) -> None:
+    """Cancel per-session work before closing the control session."""
+    await _study_cancel(session.session_id)
+    _approvals_cancel(session.session_id, "session_closed")
+    if SESSIONS.is_active(session.session_id):
+        _audit("session.close", session_id=session.session_id, result_status="ok")
+    SESSIONS.close(session.session_id)
 
 
 @app.middleware("http")
@@ -571,12 +603,12 @@ async def api_audit_reset(body: AuditResetIn):
             )
         previous_router = COMMAND_ROUTER
         try:
-            _install_security(new_runtime)
+            await _install_security(new_runtime)
         except Exception:
             log.warning("audit reset install failed; restoring old runtime",
                         exc_info=True)
             try:
-                _install_security(old_runtime)
+                await _install_security(old_runtime)
             except Exception:
                 pass
             SECURITY = old_runtime
@@ -900,6 +932,7 @@ async def _ws_handshake(ws: WebSocket) -> Session | None:
             try:
                 previous = SESSIONS.activate(session)
                 if previous is not None and previous is not session:
+                    await _study_cancel(previous.session_id)
                     _approvals_cancel(previous.session_id, "session_closed")
                     _audit("session.close", session_id=previous.session_id, result_status="ok")
                     try:
@@ -1034,6 +1067,36 @@ class ServerActions:
         config.save_settings({"UI_LANG": lang})
         await send_event({"type": "language_changed", "lang": lang})
 
+    async def study_scan(self, msg):
+        await self._study_command("start_scan", msg, "scan")
+
+    async def study_generate(self, msg):
+        await self._study_command("start_generate", msg, "generate")
+
+    async def study_list(self, msg):
+        await self._study_command("list_decks", msg, "decks")
+
+    async def study_get(self, msg):
+        await self._study_command("get_deck", msg, "decks")
+
+    async def study_delete(self, msg):
+        await self._study_command("delete_deck", msg, "decks")
+
+    async def _study_command(self, method, msg, stage):
+        service = STUDY_SERVICE
+        if service is None:
+            await send_event({
+                "type": "study_error",
+                "op_id": _study_op_id(msg),
+                "stage": stage,
+                "code": (
+                    "study_extract_failed" if stage == "scan" else "study_db_error"
+                ),
+                "message": "The study workspace is not available.",
+            })
+            return
+        await getattr(service, method)(_active_session_id(), msg)
+
     async def unknown(self, msg):
         log.info("WS: unknown command ignored: %s", _safe_cmd(msg.get("cmd")))
 
@@ -1075,11 +1138,56 @@ SECURITY_BUILD_ARGS.update({
 })
 
 
-def _install_security(runtime):
-    global SECURITY, COMMAND_ROUTER
+class _BrokenStudyStore:
+    """Store stand-in for a corrupt/unopenable study database."""
+
+    def _fail(self):
+        raise StudyStoreError(
+            "study_db_error", "The study database could not be opened."
+        )
+
+    def close(self):
+        return None
+
+    def save_deck(self, **kwargs):
+        self._fail()
+
+    def list_decks(self):
+        self._fail()
+
+    def get_deck(self, deck_id):
+        self._fail()
+
+    def delete_deck(self, deck_id, before_commit=None):
+        self._fail()
+
+
+def _build_study_service(runtime):
+    try:
+        store = StudyStore(study_db_path())
+    except StudyStoreError:
+        store = _BrokenStudyStore()
+    return StudyService(
+        broker=runtime.broker,
+        store=store,
+        emit=send_event,
+        brain=brain,
+        audit=runtime.audit,
+    )
+
+
+async def _install_security(runtime):
+    global SECURITY, COMMAND_ROUTER, STUDY_SERVICE
+    previous = STUDY_SERVICE
+    if previous is not None:
+        try:
+            await previous.cancel_all()
+        except Exception:
+            pass
     SECURITY = runtime
     brain.configure(runtime.registry, runtime.broker)
     COMMAND_ROUTER = CommandRouter(runtime.audit, runtime.approvals, ServerActions())
+    STUDY_SERVICE = _build_study_service(runtime)
 
 
 def _app_dir():
@@ -1131,10 +1239,7 @@ async def websocket_endpoint(ws: WebSocket):
         pass
     finally:
         if session is not None:
-            _approvals_cancel(session.session_id, "session_closed")
-            if SESSIONS.is_active(session.session_id):
-                _audit("session.close", session_id=session.session_id, result_status="ok")
-            SESSIONS.close(session.session_id)
+            await _close_ws_session(session)
         if ws.application_state == WebSocketState.CONNECTED:
             try:
                 await ws.close()
@@ -1258,7 +1363,7 @@ async def startup():
     # Apply the data-directory ACL before the audit key/DB and policy file
     # are created, so they inherit the restricted directory permissions.
     config.ensure_data_dir()
-    _install_security(build_runtime(**SECURITY_BUILD_ARGS))
+    await _install_security(build_runtime(**SECURITY_BUILD_ARGS))
     if config.FROZEN:
         from core.security.data_migration import migrate_legacy_data
 
