@@ -9,9 +9,10 @@ short generic message, never exception text or broker content.
 
 Generation consumes :attr:`ScanSnapshot.material` under
 :data:`SCAN_TTL_SECONDS` and persists decks through :class:`StudyStore`;
-every deck change is audited inside the store transaction, so a deck is
-never stored without its audit entry.  Error events carry a stable code
-and a short generic message, never exception text or model output.
+when an audit log is configured, every deck change is audited inside the
+store transaction and deck deletion requires one.  Error events carry a
+stable code and a short generic message, never exception text or model
+output.
 """
 from __future__ import annotations
 
