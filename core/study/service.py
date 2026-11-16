@@ -9,10 +9,9 @@ short generic message, never exception text or broker content.
 
 Generation consumes :attr:`ScanSnapshot.material` under
 :data:`SCAN_TTL_SECONDS` and persists decks through :class:`StudyStore`;
-when an audit log is configured, every deck change is audited inside the
-store transaction and deck deletion requires one.  Error events carry a
-stable code and a short generic message, never exception text or model
-output.
+every deck change is audited inside the store transaction, and a save or
+delete that cannot be audited fails closed.  Error events carry a stable
+code and a short generic message, never exception text or model output.
 """
 from __future__ import annotations
 
@@ -469,6 +468,8 @@ class StudyService:
                 "scanned_at": snapshot.scanned_at,
             }
 
+            if self._audit is None:
+                raise StudyServiceError("study_audit_unavailable", _AUDIT_UNAVAILABLE)
             deck_cards = merged["cards"]
             quiz = merged["quiz"]
 
@@ -495,10 +496,8 @@ class StudyService:
                     quiz=quiz,
                     # The store runs the callback inside its transaction and
                     # converts any failure there into a rolled-back
-                    # ``study_audit_unavailable``; without an audit log no
-                    # callback runs (the brief's own deck tests exercise the
-                    # audit-less path).
-                    before_commit=record if self._audit is not None else None,
+                    # ``study_audit_unavailable``.
+                    before_commit=record,
                 )
             except StudyStoreError as exc:
                 raise self._store_failure(exc) from None

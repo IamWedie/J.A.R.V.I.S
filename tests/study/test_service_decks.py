@@ -258,10 +258,11 @@ async def test_generate_validates_mode_counts_and_title(docs, store, emitted):
 
 
 @pytest.mark.asyncio
-async def test_title_precedence(docs, store, emitted):
+async def test_title_precedence(docs, store, emitted, tmp_path):
     emit, events = emitted
+    audit = AuditLog(tmp_path / "audit.db", hmac_key=b"0" * 32)
     brain = FakeBrain(result={"title": "Model title", "cards": [{"front": "F", "back": "B"}], "quiz": []})
-    service = make_service(docs, store, emit, brain=brain)
+    service = make_service(docs, store, emit, brain=brain, audit=audit)
     scan_id = await do_scan(service, events)
 
     await service.start_generate(
@@ -275,11 +276,12 @@ async def test_title_precedence(docs, store, emitted):
     assert events[-1]["deck"]["title"] == "Model title"
 
     generic = FakeBrain(result={"title": "Study deck", "cards": [{"front": "F", "back": "B"}], "quiz": []})
-    service = make_service(docs, store, emit, brain=generic)
+    service = make_service(docs, store, emit, brain=generic, audit=audit)
     scan_id = await do_scan(service, events, "scan-2")
     await service.start_generate("s1", {"scan_id": scan_id, "mode": "flashcards"})
     await service.wait_for_idle("s1")
     assert events[-1]["deck"]["title"] == "Study\\Biology"
+    audit.close()
 
 
 @pytest.mark.asyncio
@@ -288,6 +290,17 @@ async def test_save_audit_failure_rolls_back(docs, store, emitted):
     service = make_service(
         docs, store, emit, brain=FakeBrain(), audit=FailingAudit("study.deck_saved")
     )
+    scan_id = await do_scan(service, events)
+    await service.start_generate("s1", {"scan_id": scan_id, "mode": "flashcards"})
+    await service.wait_for_idle("s1")
+    assert events[-1]["code"] == "study_audit_unavailable"
+    assert store.list_decks() == []
+
+
+@pytest.mark.asyncio
+async def test_save_without_audit_fails_closed(docs, store, emitted):
+    emit, events = emitted
+    service = make_service(docs, store, emit, brain=FakeBrain(), audit=None)
     scan_id = await do_scan(service, events)
     await service.start_generate("s1", {"scan_id": scan_id, "mode": "flashcards"})
     await service.wait_for_idle("s1")
