@@ -13,7 +13,7 @@ def test_phone_cast_lan_telegram_license_and_updater_disabled():
 
 def test_study_work_tools_enabled():
     from core.security.features import DEFAULT_FEATURES
-    for name in ("web_search", "voice_enrollment", "gaming"):
+    for name in ("web_search", "voice_enrollment", "gaming", "study"):
         assert DEFAULT_FEATURES.enabled(name) is True
 
 def test_unknown_feature_is_disabled():

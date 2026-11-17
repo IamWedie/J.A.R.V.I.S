@@ -5,6 +5,7 @@ class Features:
     web_search: bool = True
     voice_enrollment: bool = True
     gaming: bool = True
+    study: bool = True
     phone: bool = False
     cast: bool = False
     lan_messaging: bool = False

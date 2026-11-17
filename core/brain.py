@@ -1,5 +1,7 @@
+import asyncio
 import contextlib
 import json
+import math
 from datetime import datetime
 from collections.abc import Sequence
 
@@ -9,6 +11,7 @@ import core.config as config
 from core import memory
 from core.logging_setup import get_logger
 from core.security.broker import ToolInvocation
+from core.study import generation
 
 log = get_logger("brain")
 
@@ -74,6 +77,7 @@ def _memory_context(user_text, speaker=None):
 
 MAX_TOOL_ROUNDS = 6
 FORCE_ANSWER_AT_ROUND = 4
+STUDY_GENERATION_TIMEOUT = 180.0
 
 FRIENDLY_NAMES = {
     "x-preview-f-free": "Ox Alpha Free",
@@ -255,6 +259,90 @@ class Brain:
 
     def reset_history(self):
         self.history = []
+
+    async def generate_study_material(self, material, mode, card_count, question_count):
+        mode, card_count, question_count = generation.validate_request(
+            mode, card_count, question_count
+        )
+        try:
+            client = self._ensure_client()
+        except Exception:
+            raise generation.StudyGenerationError(
+                "study_model_unavailable", "No AI provider is configured."
+            ) from None
+        chunks = generation.chunk_material(material)
+        try:
+            return await asyncio.wait_for(
+                self._generate_study_chunks(
+                    client, chunks, mode, card_count, question_count
+                ),
+                timeout=STUDY_GENERATION_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            raise generation.StudyGenerationError(
+                "study_model_error", "Generation timed out."
+            ) from None
+
+    async def _generate_study_chunks(self, client, chunks, mode, cards, questions):
+        results = []
+        share_cards = math.ceil(cards / len(chunks)) if cards else 0
+        share_questions = math.ceil(questions / len(chunks)) if questions else 0
+        for chunk in chunks:
+            messages = generation.build_messages(
+                chunk, mode, share_cards, share_questions
+            )
+            text = await self._study_completion(client, messages)
+            try:
+                results.append(generation.parse_result(text, mode))
+            except generation.StudyGenerationError as exc:
+                if exc.code != "study_invalid_output":
+                    raise
+                repaired = generation.build_repair_messages(
+                    messages, text, str(exc)
+                )
+                text = await self._study_completion(client, repaired)
+                results.append(generation.parse_result(text, mode))
+        return generation.merge_results(
+            results, mode, cards, questions, "Study deck"
+        )
+
+    async def _study_completion(self, client, messages):
+        kwargs = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0.3,
+            "max_tokens": 4000,
+        }
+        try:
+            response = await client.chat.completions.create(
+                **kwargs, response_format={"type": "json_object"}
+            )
+        except Exception as exc:
+            text = str(exc).lower()
+            rejected_format = (
+                "response_format" in text
+                or "json_object" in text
+                or getattr(exc, "status_code", None) == 400
+            )
+            if not rejected_format:
+                raise generation.StudyGenerationError(
+                    "study_model_error", "The AI provider could not generate the deck."
+                ) from None
+            try:
+                response = await client.chat.completions.create(**kwargs)
+            except Exception:
+                raise generation.StudyGenerationError(
+                    "study_model_error", "The AI provider could not generate the deck."
+                ) from None
+        try:
+            content = response.choices[0].message.content
+        except Exception:
+            content = None
+        if not isinstance(content, str) or not content.strip():
+            raise generation.StudyGenerationError(
+                "study_model_error", "The AI provider returned no content."
+            )
+        return content
 
     async def _execute_tool_call(self, call, session_id, source) -> str:
         try:

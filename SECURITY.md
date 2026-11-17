@@ -1,4 +1,4 @@
-# JARVIS 3.0 Security Model
+# JARVIS 3.1 Security Model
 
 This document states what J.A.R.V.I.S defends against, exactly which
 mechanisms do the work, and where each piece of data lives. It describes
@@ -88,6 +88,41 @@ does not exist.
   `"revoke"`). A reset (below) archives the key-signed policy file, which
   invalidates all old grants.
 
+## Study workspace
+
+- Study files are read only through the signed `study_extract` tool. Its
+  manifest entry declares `filesystem.read`, risk `guarded`, the
+  `restricted` lane, feature `study`, one allowed root (`~/Documents`),
+  and an argument scope limiting `filesystem` to `path`; its two code
+  files are SHA-256-pinned like every other tool.
+- The tool refuses paths outside Documents, reparse points/junctions,
+  hidden and temporary files, and oversized inputs. It performs no
+  network access. Images are OCR'd only when the optional `winocr`
+  package is installed; scanned PDFs without a text layer are reported as
+  skipped instead of being OCR'd in this release.
+- The five study commands map to segregated capabilities: `study_scan`,
+  `study_list`, and `study_get` use `study.read`; `study_generate` uses
+  `study.write`; `study_delete` uses `study.delete` and additionally
+  requires `{confirm: true}`. Every study command is audited before
+  dispatch (`command.request`) and when the router accepts it
+  (`command.result`); scan and generation then continue in a tracked task.
+  Those command rows carry the command name and capability, never paths,
+  deck ids, titles, or source text. Deck save/delete events add only the
+  deck id and card/question counts.
+- Extracted source text lives only in the in-memory scan cache
+  for 15 minutes. It is never written to `audit.db`, `study.db`, or
+  server logs; scan previews expose relative file names, formats,
+  character counts, and skip reasons only. Tool-request audit rows may
+  contain the validated absolute source path (truncated like every other
+  argument), but never file contents or extracted text.
+- `study.db` stores generated deck content the user chose to create:
+  title, source path, source summary (file counts and truncation flag),
+  mode, creation time, flashcards, and quiz questions/options/answers/
+  explanations. Deleting a deck deletes that row and its children.
+- Generating a deck sends the selected text to the configured AI provider.
+  The Study UI states this before the Generate button. Nothing else about
+  the files leaves the machine.
+
 ## Approvals
 
 - ASK-verdict actions surface a request-bound approval UI: a random
@@ -157,10 +192,11 @@ isolate file handles, nothing more.
 ## Data locations
 
 - Packaged (frozen) builds: `%LOCALAPPDATA%\JARVIS` (`audit.db`,
-  `audit.key`, `security_policy.json`, vault DB, memories DB, settings).
+  `audit.key`, `security_policy.json`, `study.db`, vault DB, memories DB,
+  settings).
 - Source runs: the repository root (the directory containing
-  `server.py`, where `audit.db`, `audit.key`, `security_policy.json`, and
-  `.env` live; path helpers in `core/config.py`).
+  `server.py`, where `audit.db`, `audit.key`, `security_policy.json`,
+  `study.db`, and `.env` live; path helpers in `core/config.py`).
 - Secrets vault: DPAPI-encrypted store for API keys and the like, with
   ACLs best-effort limited to the current user.
 - On audit reset: the archived DB/key/policy land under

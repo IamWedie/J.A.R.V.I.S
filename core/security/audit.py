@@ -49,6 +49,8 @@ EVENT_TYPES: tuple[str, ...] = (
     "audit.reset",
     "audit.pruned",
     "voice.rejected",
+    "study.deck_saved",
+    "study.deck_deleted",
 )
 
 #: Every column, in schema order.

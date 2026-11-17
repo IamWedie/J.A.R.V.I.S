@@ -56,6 +56,11 @@ COMMAND_POLICY: dict[str, CommandPolicy] = {
     "voice_reset": CommandPolicy("voice.delete", True, True),
     "wipe_memory": CommandPolicy("memory.delete", True, True),
     "reset": CommandPolicy("conversation.reset", True, True),
+    "study_scan": CommandPolicy("study.read", False, True),
+    "study_generate": CommandPolicy("study.write", False, True),
+    "study_list": CommandPolicy("study.read", False, True),
+    "study_get": CommandPolicy("study.read", False, True),
+    "study_delete": CommandPolicy("study.delete", True, True),
 }
 
 #: Commands whose server-side implementation was deleted; always rejected.
@@ -76,6 +81,11 @@ _DISPATCH: dict[str, str] = {
     "voice_reset": "voice_reset",
     "wipe_memory": "wipe_memory",
     "set_language": "set_language",
+    "study_scan": "study_scan",
+    "study_generate": "study_generate",
+    "study_list": "study_list",
+    "study_get": "study_get",
+    "study_delete": "study_delete",
 }
 
 _DENYING = frozenset({"confirm_required", "approval_rejected"})
@@ -107,6 +117,11 @@ class CommandActions(Protocol):
     async def voice_reset(self, msg: dict) -> None: ...
     async def wipe_memory(self, msg: dict) -> None: ...
     async def set_language(self, msg: dict) -> None: ...
+    async def study_scan(self, msg: dict) -> None: ...
+    async def study_generate(self, msg: dict) -> None: ...
+    async def study_list(self, msg: dict) -> None: ...
+    async def study_get(self, msg: dict) -> None: ...
+    async def study_delete(self, msg: dict) -> None: ...
     async def unknown(self, msg: dict) -> None: ...
 
 

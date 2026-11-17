@@ -114,6 +114,12 @@
         <p class="hint" data-i18n="enroll_info">Enroll = say 3 short phrases. After that JARVIS only obeys this voice via wake word.</p>
     </div>
 
+    <nav id="viewTabs" class="viewTabs" role="tablist" aria-label="Workspace">
+        <button id="tabChat" class="tab active" role="tab" aria-selected="true" aria-controls="chatView" data-i18n="tab_chat">CHAT</button>
+        <button id="tabStudy" class="tab" role="tab" aria-selected="false" aria-controls="studyView" data-i18n="tab_study">STUDY</button>
+    </nav>
+
+    <section id="chatView" class="chatView" role="tabpanel" aria-labelledby="tabChat">
     <canvas id="face" role="img" aria-label="JARVIS animated face"></canvas>
     <div id="status" aria-live="polite" data-i18n="online">Online</div>
     <div id="offlineBanner" class="hidden" role="alert" data-i18n="no_internet">No internet connection — voice and AI features unavailable</div>
@@ -149,6 +155,91 @@
             </svg>
         </button>
     </div>
+    </section>
+
+    <section id="studyView" class="studyView hidden" role="tabpanel" aria-labelledby="tabStudy">
+        <div id="studySourcePanel" class="studyPanel">
+            <div class="settingsRow"><span data-i18n="study_source">Source under Documents</span></div>
+            <label class="studyLabel" for="studyPathInput" data-i18n="study_path_label">File or folder</label>
+            <input id="studyPathInput" type="text" placeholder="Documents\Study\Biology" data-i18n-placeholder="study_path_placeholder" aria-label="Study file or folder path">
+            <label class="studyCheck"><input type="checkbox" id="studyRecursive" checked> <span data-i18n="study_recursive">Include subfolders</span></label>
+            <button id="studyScanBtn" data-i18n="study_scan">SCAN</button>
+            <div id="studyStatusLine" class="studyStatus" role="status" aria-live="polite"></div>
+
+            <div id="studyPreview" class="studyPreview hidden">
+                <div class="settingsRow"><span data-i18n="study_preview">Extraction preview</span></div>
+                <div id="studyPreviewSummary" class="studySummary"></div>
+                <div id="studyPreviewList" class="studyList"></div>
+                <div id="studySkippedList" class="studyList studySkipped"></div>
+                <div class="studyControls">
+                    <label for="studyMode" data-i18n="study_mode">Deck type</label>
+                    <select id="studyMode" aria-label="Deck type">
+                        <option value="flashcards" data-i18n="study_flashcards">Flashcards</option>
+                        <option value="quiz" data-i18n="study_quiz">Quiz</option>
+                        <option value="both" data-i18n="study_both">Both</option>
+                    </select>
+                    <label for="studyCards" data-i18n="study_cards">Cards</label>
+                    <input id="studyCards" type="number" min="5" max="40" value="15" aria-label="Number of flashcards">
+                    <label for="studyQuestions" data-i18n="study_questions">Questions</label>
+                    <input id="studyQuestions" type="number" min="3" max="20" value="8" aria-label="Number of quiz questions">
+                    <label for="studyTitleInput" data-i18n="study_deck_title">Deck title (optional)</label>
+                    <input id="studyTitleInput" type="text" maxlength="120" aria-label="Deck title">
+                </div>
+                <div id="studyEstimate" class="hint"></div>
+                <p class="hint" data-i18n="study_privacy">The selected text is sent to your AI provider to generate the deck.</p>
+                <button id="studyGenerateBtn" data-i18n="study_generate">GENERATE DECK</button>
+            </div>
+        </div>
+
+        <div id="studyLibraryPanel" class="studyPanel">
+            <div class="settingsRow">
+                <span data-i18n="study_saved_decks">Saved decks</span>
+                <button id="studyRefreshBtn" class="studySmall" data-i18n="study_refresh">REFRESH</button>
+            </div>
+            <div id="studyDeckList" class="studyList"></div>
+        </div>
+
+        <div id="studyDeckView" class="studyDeckView hidden">
+            <div class="settingsRow studyDeckBar">
+                <button id="studyBackBtn" class="studySmall" data-i18n="study_back">BACK</button>
+                <button id="studyDeleteBtn" class="danger studySmall" data-i18n="study_delete">DELETE</button>
+            </div>
+            <div id="studyDeckTitle" class="studyDeckTitle"></div>
+            <div id="studyDeckMeta" class="hint"></div>
+            <div id="studyDeckWarning" class="studyWarning hidden" data-i18n="study_truncated_deck">This deck was generated from truncated material.</div>
+
+            <div id="studyDeckTabs" class="viewTabs" role="tablist" aria-label="Deck contents">
+                <button id="studyCardsTab" class="tab active" role="tab" aria-selected="true" aria-controls="studyCardPanel" data-i18n="study_cards_tab">CARDS</button>
+                <button id="studyQuizTab" class="tab" role="tab" aria-selected="false" aria-controls="studyQuizPanel" data-i18n="study_quiz_tab">QUIZ</button>
+            </div>
+
+            <div id="studyCardPanel" class="studyPanelInner" role="tabpanel" aria-labelledby="studyCardsTab">
+                <div id="studyCardPosition" class="studyCardPosition"></div>
+                <div id="studyCard" class="studyCard" role="button" tabindex="0" aria-label="Flashcard - activate to flip">
+                    <div id="studyCardFront" class="studyCardFace"></div>
+                    <div id="studyCardBack" class="studyCardFace hidden"></div>
+                </div>
+                <button id="studyCardFlipBtn" data-i18n="study_flip">FLIP</button>
+                <div class="studyNav">
+                    <button id="studyPrevCard" data-i18n="study_prev">PREVIOUS</button>
+                    <button id="studyNextCard" data-i18n="study_next">NEXT</button>
+                </div>
+                <button id="studyShuffleBtn" data-i18n="study_shuffle">SHUFFLE</button>
+            </div>
+
+            <div id="studyQuizPanel" class="studyPanelInner hidden" role="tabpanel" aria-labelledby="studyQuizTab">
+                <div id="studyQuizPosition" class="studyCardPosition"></div>
+                <div id="studyQuizQuestion" class="studyQuizQuestion"></div>
+                <div id="studyQuizOptions" class="studyQuizOptions" role="group" aria-label="Answer options"></div>
+                <button id="studyQuizSubmit" data-i18n="study_submit">SUBMIT ANSWER</button>
+                <div id="studyQuizFeedback" class="studyQuizFeedback" role="status" aria-live="polite"></div>
+                <div id="studyQuizExplanation" class="studyQuizExplanation"></div>
+                <button id="studyQuizNext" class="hidden" data-i18n="study_next_question">NEXT QUESTION</button>
+                <div id="studyQuizScore" class="studyQuizScore" role="status" aria-live="polite"></div>
+                <button id="studyQuizRestart" class="hidden" data-i18n="study_restart">RESTART QUIZ</button>
+            </div>
+        </div>
+    </section>
 </div>
 <script src="/face.js"></script>
 <script src="/app.js"></script>

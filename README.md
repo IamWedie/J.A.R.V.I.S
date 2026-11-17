@@ -9,6 +9,7 @@ A voice-controlled personal assistant for Windows, inspired by Iron Man.
 - **Tools**: Launch/close apps, volume, media keys, screenshots, OCR, screen describe, system reports, file search, clipboard, web search, approval-gated power actions
 - **Security**: Token-authenticated local UI, signed tool manifest, default-deny capability policy with revocable grants, tamper-evident audit log — see [SECURITY.md](SECURITY.md)
 - **Memory**: Permanent local SQLite — conversations, auto-learned facts, per-user profiles
+- **Study Workspace**: Scan folders or files under `Documents` (PDF, Word, PowerPoint, Excel, text, code, images), preview the extraction, and generate saved flashcard decks and scored quizzes. Decks live locally in `study.db`; image OCR needs the optional `winocr` package.
 - **Smart Reminders**: Voice-scheduled reminders with notifications
 - **Barge-in**: Interrupt JARVIS while speaking
 - **Auto-learning**: Extracts and remembers facts from conversation
@@ -79,6 +80,7 @@ configuration for a personal build.
 
 - API key and voice fingerprint never leave your PC
 - Memory stored locally in SQLite — nothing in the cloud
+- Study decks are stored locally in `study.db`; extracted source text is not persisted. When you generate a deck, the selected text is sent to your AI provider, and the UI says so before you press Generate.
 - Speech transcribed locally (faster-whisper)
 - AI replies generated in the cloud (OpenCode Zen)
 - `.env` is gitignored — secrets never committed

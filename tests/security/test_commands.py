@@ -4,6 +4,7 @@ Every test drives a real ``AuditLog`` in ``tmp_path`` (except the audit-failure
 test, which uses a stand-in whose writes always raise) so the
 ``command.request`` / ``command.result`` pairing is exercised for real.
 """
+import json
 import time
 
 import pytest
@@ -61,6 +62,21 @@ class FakeActions:
 
     async def set_language(self, msg):
         self._record("set_language", msg)
+
+    async def study_scan(self, msg):
+        self._record("study_scan", msg)
+
+    async def study_generate(self, msg):
+        self._record("study_generate", msg)
+
+    async def study_list(self, msg):
+        self._record("study_list", msg)
+
+    async def study_get(self, msg):
+        self._record("study_get", msg)
+
+    async def study_delete(self, msg):
+        self._record("study_delete", msg)
 
     async def unknown(self, msg):
         self._record("unknown", msg)
@@ -212,3 +228,80 @@ async def test_audit_failure_blocks_config_command(session, actions):
     ok = await router.handle(session, {"cmd": "chat", "text": "hello"})
     assert ok.ok is True
     assert actions.names.count("chat") == 1
+
+
+STUDY_COMMANDS = (
+    "study_scan",
+    "study_generate",
+    "study_list",
+    "study_get",
+    "study_delete",
+)
+
+
+def test_study_command_policies_are_registered():
+    for cmd in STUDY_COMMANDS:
+        assert cmd in COMMAND_POLICY
+        assert COMMAND_POLICY[cmd].requires_audit is True
+    assert COMMAND_POLICY["study_delete"].requires_confirm is True
+    for cmd in ("study_scan", "study_generate", "study_list", "study_get"):
+        assert COMMAND_POLICY[cmd].requires_confirm is False
+
+
+@pytest.mark.asyncio
+async def test_study_commands_dispatch_the_raw_message(audit, session, actions):
+    router = make_router(audit, actions)
+    messages = [
+        {"cmd": "study_scan", "path": "Study", "op_id": "op-scan"},
+        {"cmd": "study_generate", "scan_id": "scan-1", "op_id": "op-gen"},
+        {"cmd": "study_list", "op_id": "op-list"},
+        {"cmd": "study_get", "deck_id": "deck-1", "op_id": "op-get"},
+        {"cmd": "study_delete", "deck_id": "deck-1", "confirm": True, "op_id": "op-del"},
+    ]
+    for msg in messages:
+        result = await router.handle(session, msg)
+        assert result.ok is True
+    assert actions.calls == [(msg["cmd"], msg) for msg in messages]
+
+    # The audit row carries only the command name, never the payload.
+    rows = audit.recent(20)
+    assert [row["event_type"] for row in rows] == [
+        "command.request", "command.result"
+    ] * 5
+    raw = json.dumps(rows)
+    assert "scan-1" not in raw
+    assert "deck-1" not in raw
+
+
+@pytest.mark.asyncio
+async def test_study_delete_requires_confirm(audit, session, actions):
+    router = make_router(audit, actions)
+    result = await router.handle(session, {"cmd": "study_delete", "deck_id": "deck-1"})
+    assert result.ok is False
+    assert result.error_code == "confirm_required"
+    assert actions.names == []
+    last = audit.recent(5)[-1]
+    assert last["event_type"] == "command.result"
+    assert last["result_status"] == "denied"
+    assert last["error_code"] == "confirm_required"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cmd", STUDY_COMMANDS)
+async def test_study_command_audit_failure_blocks(session, actions, cmd):
+    router = make_router(BrokenAudit(), actions)
+    result = await router.handle(session, {"cmd": cmd, "confirm": True})
+    assert result.ok is False
+    assert result.error_code == "audit_unavailable"
+    assert actions.names == []
+
+
+@pytest.mark.asyncio
+async def test_revoked_session_cannot_issue_study_commands(audit, session, actions):
+    router = make_router(audit, actions)
+    session.revoked_at = time.time()
+    for cmd in STUDY_COMMANDS:
+        result = await router.handle(session, {"cmd": cmd, "confirm": True})
+        assert result.ok is False
+        assert result.error_code == "session_revoked"
+    assert actions.names == []
