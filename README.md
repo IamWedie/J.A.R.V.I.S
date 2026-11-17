@@ -54,7 +54,7 @@ All settings are in `.env` (created by the setup wizard or installer):
 | Variable | Default | Description |
 |---|---|---|
 | `ZEN_API_KEY` | — | Your OpenCode Zen API key |
-| `ZEN_MODEL` | `x-preview-f-free` | Brain model |
+| `ZEN_MODEL` | `hy4-flash-free` | Brain model |
 | `STT_MODEL` | `tiny` | Whisper model (tiny = fast) |
 | `STT_LANG` | `auto` | Auto-detect, filtered to en/ar |
 | `TTS_VOICE` | `ar-TN-HediNeural` | TTS voice |

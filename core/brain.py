@@ -80,7 +80,17 @@ FORCE_ANSWER_AT_ROUND = 4
 STUDY_GENERATION_TIMEOUT = 180.0
 
 FRIENDLY_NAMES = {
-    "x-preview-f-free": "Ox Alpha Free",
+    "hy4-flash-free": "Hy4 Flash Free",
+    "iceman-free": "Iceman Free",
+    "inkling-2-small-free": "Inkling 2 Small Free",
+    "longcat-2.5-free": "LongCat 2.5 Free",
+    "flint-40b-free": "Flint 40B Free",
+    "deepseek-v4.1-flash-free": "DeepSeek V4.1 Flash Free",
+    "nemotron-3.5-super-vl-free": "Nemotron 3.5 Super VL Free",
+    "beam-free": "Beam Free",
+    "mimo-v2.6-flash-free": "MiMo V2.6 Flash Free",
+    "glm-5.3-flash-free": "GLM 5.3 Flash Free",
+    "gemma-4-26b-a4b-it": "Gemma 4 26B A4B",
     "big-pickle": "Big Pickle",
     "claude-fable-5": "Claude Fable 5",
     "claude-opus-5": "Claude Opus 5",
@@ -119,10 +129,10 @@ FRIENDLY_NAMES = {
 }
 
 FREE_MODELS = {
-    "x-preview-f-free", "big-pickle", "mimo-v2.5-free", "hy3-free",
-    "nemotron-3-ultra-free", "nemotron-3.5-lightning-free",
-    "muse-spark-1.2-contributor-free", "laguna-s-2.1-free",
-    "deepseek-v4-flash-free",
+    "hy4-flash-free", "iceman-free", "inkling-2-small-free",
+    "longcat-2.5-free", "flint-40b-free", "deepseek-v4.1-flash-free",
+    "nemotron-3.5-super-vl-free", "beam-free", "mimo-v2.6-flash-free",
+    "glm-5.3-flash-free", "big-pickle", "gemma-4-26b-a4b-it",
 }
 
 
@@ -448,7 +458,7 @@ class Brain:
         return "I apologize sir, I could not complete that request."
 
 
-FALLBACK_MODELS = ["laguna-s-2.1-free", "big-pickle", "nemotron-3.5-lightning-free"]
+FALLBACK_MODELS = ["deepseek-v4.1-flash-free", "glm-5.3-flash-free", "big-pickle"]
 
 
 async def ask_vision(goal, screenshot_b64, context=""):
@@ -508,7 +518,7 @@ async def ask_vision(goal, screenshot_b64, context=""):
         api_key=config.ZEN_API_KEY,
         timeout=60,
     )
-    model = config.DEFAULT_MODEL or "mimo-v2.5-free"
+    model = config.DEFAULT_MODEL or config.DEFAULT_MODEL_NAME
     models = [model] + [m for m in FALLBACK_MODELS if m != model]
     for m in models:
         try:

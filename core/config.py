@@ -73,8 +73,9 @@ VERSION = _read_version()
 
 ZEN_API_KEY = os.getenv("ZEN_API_KEY", "").strip()
 ZEN_KEY_VALIDATED = os.getenv("ZEN_KEY_VALIDATED", "").strip().lower() in ("1", "true", "yes")
-ZEN_BASE_URL = "https://opencode.ai/zen/v1"
-DEFAULT_MODEL = os.getenv("ZEN_MODEL", "").strip() or "x-preview-f-free"
+ZEN_BASE_URL = os.getenv("ZEN_BASE_URL", "https://opencode.ai/zen/v1")
+DEFAULT_MODEL_NAME = "hy4-flash-free"
+DEFAULT_MODEL = os.getenv("ZEN_MODEL", "").strip() or DEFAULT_MODEL_NAME
 
 STT_MODEL = os.getenv("STT_MODEL", "").strip() or "tiny.en"
 TTS_VOICE = os.getenv("TTS_VOICE", "").strip() or "en-US-AndrewNeural"
