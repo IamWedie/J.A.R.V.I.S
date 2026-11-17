@@ -18,9 +18,27 @@ hiddenimports = [
     "pystray._win32",
     "comtypes.stream",
     "cryptography.hazmat.primitives.asymmetric.ed25519",
+    "core.study.extractors",
+    "core.study.generation",
+    "core.study.paths",
+    "core.study.service",
+    "core.study.store",
+    "core.tools.study_tools",
+    "pypdf",
+    "docx",
+    "pptx",
+    "openpyxl",
+    "lxml",
+    "lxml.etree",
+    "et_xmlfile",
 ]
 
 import os
+
+from importlib.util import find_spec
+
+if find_spec("winocr") is not None:
+    hiddenimports += ["winocr"]
 
 _VISION_INC = os.getenv("JARVIS_BUILD_VISION", "").strip().lower() in ("1", "true", "yes")
 

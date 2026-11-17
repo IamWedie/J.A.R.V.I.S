@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.1.0 (2026-11-13)
+
+### Study Workspace
+
+- **Documents-only extraction**: a signed `study_extract` tool (guarded risk, `filesystem.read`, restricted lane, single root `~/Documents`) reads PDF (`pypdf`), Word (`python-docx`), PowerPoint (`python-pptx`), Excel (`openpyxl`), text, and source-code files. All reads pass through the broker; paths outside Documents and reparse points are refused. Images use the optional `winocr` package; scanned PDFs without a text layer are reported, not OCR'd, in this release.
+- **Scan preview**: per-file format and character counts, skipped-file reasons, and an explicit truncation warning. Extracted text is cached in memory per session for 15 minutes and is never written to the audit log, server logs, or disk.
+- **Deck generation**: flashcards, quizzes, or both through the configured AI model, with chunking, JSON-mode fallback, one repair retry, deduplication, and 5-40 card / 3-20 question limits. Model output is validated before anything is saved.
+- **Persistent deck library**: `study.db` stores generated decks (title, source path, source summary, cards, quiz questions/answers/explanations). Open, review, shuffle, take a scored quiz with explanations, and delete decks from the Study tab.
+- **Segregated, audited controls**: `study.read`, `study.write`, and `study.delete` command capabilities; all five study commands require a successful `command.request` audit write, and deletion requires `confirm: true`. A corrupt `study.db` degrades study commands only and cannot block startup or the audit database.
+- **Bilingual UI**: Chat/Study tabs, English and Arabic copy, keyboard-operable card flip, real radio-button quiz options, immediate correctness feedback, and a final score with restart.
+
+### Dependencies
+
+- Add `pypdf==7.0.0`, `python-docx==1.2.0`, `python-pptx==1.0.2`, `openpyxl==3.1.5`. `winocr` remains optional and is not required by tests or builds.
+
 ## 3.0.0 (2026-11-08)
 
 ### Secure Core
