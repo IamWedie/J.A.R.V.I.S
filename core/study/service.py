@@ -24,8 +24,10 @@ from dataclasses import dataclass
 
 from core.security.broker import ToolInvocation, ToolResult
 from core.study.generation import (
+    CHUNK_CHARS,
     DEFAULT_CARDS,
     DEFAULT_QUESTIONS,
+    MAX_CHUNKS,
     StudyGenerationError,
     merge_results,
     sanitize_title,
@@ -57,12 +59,18 @@ _AUDIT_UNAVAILABLE = "The study audit log is unavailable."
 #: Codes :meth:`Brain.generate_study_material` is allowed to raise; anything
 #: else from it is reported as ``study_model_error``.
 _BRAIN_CODES = frozenset(
-    {"study_model_unavailable", "study_model_error", "study_invalid_output"}
+    {
+        "study_model_unavailable",
+        "study_model_error",
+        "study_invalid_output",
+        "study_invalid_request",
+    }
 )
 _BRAIN_MESSAGES = {
     "study_model_unavailable": _MODEL_UNAVAILABLE,
     "study_model_error": _MODEL_ERROR,
     "study_invalid_output": _MODEL_OUTPUT,
+    "study_invalid_request": _GENERIC_REQUEST_FAILURE,
 }
 _STORE_MESSAGES = {
     "study_db_error": _GENERIC_STORE_FAILURE,
@@ -434,8 +442,16 @@ class StudyService:
             # The brain re-validates and zeroes the sections its mode does not
             # need, so it receives the user's raw counts; the service only
             # uses validate_request to reject an invalid request up front.
+            # The joined snapshot material can exceed the generation budget
+            # (the "\n\n" joins add characters beyond the extractor cap), so
+            # it is capped here to what chunk_material will accept.
+            material = snapshot.material
+            budget = CHUNK_CHARS * MAX_CHUNKS
+            material_truncated = len(material) > budget
+            if material_truncated:
+                material = material[:budget]
             raw = await self._brain_result(
-                brain, snapshot.material, mode, cards, questions
+                brain, material, mode, cards, questions
             )
             root = snapshot.payload.get("root")
             try:
@@ -463,7 +479,7 @@ class StudyService:
                     {document["format"] for document in payload["documents"]}
                 ),
                 "total_chars": payload["total_chars"],
-                "truncated": payload["truncated"],
+                "truncated": payload["truncated"] or material_truncated,
                 "skipped_count": len(payload["skipped"]),
                 "scanned_at": snapshot.scanned_at,
             }

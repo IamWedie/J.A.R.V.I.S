@@ -72,3 +72,10 @@ def test_review_labels_exist_in_both_languages():
 def test_language_refresh_does_not_reset_an_answered_question():
     js = read("app.js")
     assert "!studyQuizAnswered" in js
+
+
+def test_deck_actions_are_blocked_while_study_is_busy():
+    js = read("app.js")
+    assert "function syncStudyDeckActions" in js
+    assert "button.disabled = studyBusy" in js
+    assert js.count("if (studyBusy) {") >= 2

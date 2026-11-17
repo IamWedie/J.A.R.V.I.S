@@ -831,6 +831,7 @@ function onMessage(ev) {
             if (msg.op_id !== studyOpId) break;
             studyStatusLine.textContent = t('study_saved');
             showToast(t('study_saved'), 'success');
+            setStudyBusy(false);
             openStudyDeck(msg.deck && msg.deck.id);
             break;
         case 'study_list_result':
@@ -1264,6 +1265,13 @@ function setStudyBusy(busy) {
     studyPathInput.disabled = busy;
     studyRecursive.disabled = busy;
     syncStudyControls();
+    syncStudyDeckActions();
+}
+
+function syncStudyDeckActions() {
+    for (const button of studyDeckListEl.querySelectorAll('button')) {
+        button.disabled = studyBusy;
+    }
 }
 
 function resetStudy() {
@@ -1367,6 +1375,7 @@ function renderStudyDeckList(decks) {
         row.className = 'studyItem';
         row.textContent = t('study_no_decks');
         studyDeckListEl.appendChild(row);
+        syncStudyDeckActions();
         return;
     }
     for (const deck of studyDecks) {
@@ -1395,10 +1404,15 @@ function renderStudyDeckList(decks) {
         row.appendChild(meta);
         studyDeckListEl.appendChild(row);
     }
+    syncStudyDeckActions();
 }
 
 function openStudyDeck(deckId) {
     if (typeof deckId !== 'string' || !deckId) return;
+    if (studyBusy) {
+        showToast(t('study_err_busy'), 'warning');
+        return;
+    }
     setStudyBusy(true);
     studyStatusLine.textContent = t('study_loading');
     sendStudy('study_get', { deck_id: deckId });
@@ -1406,6 +1420,10 @@ function openStudyDeck(deckId) {
 
 function deleteStudyDeck(deckId, title) {
     if (typeof deckId !== 'string' || !deckId) return;
+    if (studyBusy) {
+        showToast(t('study_err_busy'), 'warning');
+        return;
+    }
     if (!confirm(t('study_confirm_delete', { title }))) return;
     setStudyBusy(true);
     sendStudy('study_delete', { deck_id: deckId, confirm: true });

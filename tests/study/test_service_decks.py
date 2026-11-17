@@ -105,9 +105,9 @@ def emitted():
     return emit, events
 
 
-def make_service(docs, store, emit, brain=None, audit=None, clock=None):
+def make_service(docs, store, emit, brain=None, audit=None, clock=None, broker=None):
     return StudyService(
-        broker=FakeBroker(),
+        broker=broker or FakeBroker(),
         store=store,
         emit=emit,
         brain=brain,
@@ -210,6 +210,7 @@ async def test_model_failures_do_not_save_a_deck(docs, store, emitted):
     for error, expected in (
         (StudyGenerationError("study_model_error", "boom"), "study_model_error"),
         (StudyGenerationError("study_invalid_output", "bad"), "study_invalid_output"),
+        (StudyGenerationError("study_invalid_request", "bad"), "study_invalid_request"),
     ):
         service = make_service(docs, store, emit, brain=FakeBrain(error=error))
         scan_id = await do_scan(service, events)
@@ -217,6 +218,51 @@ async def test_model_failures_do_not_save_a_deck(docs, store, emitted):
         await service.wait_for_idle("s1")
         assert events[-1]["code"] == expected
         assert store.list_decks() == []
+
+
+@pytest.mark.asyncio
+async def test_joined_material_is_capped_to_the_generation_budget(
+    docs, store, emitted, tmp_path
+):
+    emit, events = emitted
+    texts = ["A" * 18_000 for _ in range(5)]
+    payload = {
+        "root": "Study\\Biology",
+        "documents": [
+            {
+                "path": "part-%d.txt" % index,
+                "format": "text",
+                "chars": len(text),
+                "pages": None,
+                "text": text,
+            }
+            for index, text in enumerate(texts)
+        ],
+        "skipped": [],
+        "total_chars": sum(len(text) for text in texts),
+        "truncated": False,
+        "limits": {"max_files": 20, "max_total_chars": 90000},
+    }
+    audit = AuditLog(tmp_path / "audit.db", hmac_key=b"0" * 32)
+    brain = FakeBrain()
+    service = make_service(
+        docs,
+        store,
+        emit,
+        brain=brain,
+        audit=audit,
+        broker=FakeBroker(ToolResult(True, json.dumps(payload), None)),
+    )
+    scan_id = await do_scan(service, events)
+    await service.start_generate(
+        "s1", {"scan_id": scan_id, "mode": "flashcards"}
+    )
+    await service.wait_for_idle("s1")
+    assert events[-1]["type"] == "study_generate_result"
+    assert len(brain.calls[0][0]) == 90_000
+    deck = store.get_deck(events[-1]["deck"]["id"])
+    assert deck["source_summary"]["truncated"] is True
+    audit.close()
 
 
 @pytest.mark.asyncio

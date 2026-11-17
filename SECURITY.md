@@ -104,7 +104,8 @@ does not exist.
   `study_list`, and `study_get` use `study.read`; `study_generate` uses
   `study.write`; `study_delete` uses `study.delete` and additionally
   requires `{confirm: true}`. Every study command is audited before
-  dispatch (`command.request`) and after it finishes (`command.result`).
+  dispatch (`command.request`) and when the router accepts it
+  (`command.result`); scan and generation then continue in a tracked task.
   Those command rows carry the command name and capability, never paths,
   deck ids, titles, or source text. Deck save/delete events add only the
   deck id and card/question counts.
