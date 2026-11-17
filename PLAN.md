@@ -15,7 +15,7 @@ Click the mic or type. Wake word: "Hey Jarvis" (opt-in from UI toggle).
 
 - **UI**: pywebview + animated canvas face (idle / listening / thinking / speaking)
 - **Brain**: OpenCode Zen gateway (`https://opencode.ai/zen/v1`), 64 models available
-  - Default: `x-preview-f-free`, fallback chain: `laguna-s-2.1-free` → `big-pickle` → `nemotron-3.5-lightning-free`
+  - Default: `hy4-flash-free`, fallback chain: `deepseek-v4.1-flash-free` → `glm-5.3-flash-free` → `big-pickle`
   - Switch live from dropdown (Claude, GPT, Gemini, Grok, free models...)
   - Streaming: tokens arrive word-by-word, TTS starts before LLM finishes
 - **Ears**: faster-whisper `tiny.en` (int8), bundled models dir, 0.7s silence detection
@@ -71,7 +71,7 @@ Ping sweep + ARP table + mDNS (zeroconf) + SSDP + OUI vendor DB (30+ vendors). S
 |---|---|---|
 | ZEN_API_KEY | (set) | from https://opencode.ai/auth |
 | ZEN_BASE_URL | https://opencode.ai/zen/v1 | OpenAI-compatible endpoint |
-| ZEN_MODEL | x-preview-f-free | any of the 64 model IDs |
+| ZEN_MODEL | hy4-flash-free | any of the available model IDs |
 | STT_MODEL | tiny.en | base.en / small.en = better accuracy, slower |
 | TTS_VOICE | en-US-BrianNeural | any edge-tts voice |
 | TTS_RATE | +30% | speech speed |

@@ -32,8 +32,42 @@ def test_fallback_models():
 
 def test_free_model_detection():
     from core.brain import is_free_model
-    assert is_free_model("mimo-v2.5-free") is True
+    assert is_free_model("hy4-flash-free") is True
+    assert is_free_model("big-pickle") is True
     assert is_free_model("gpt-4") is False
+
+
+def test_model_catalog_is_current():
+    import core.brain as brain
+    from core.config import DEFAULT_MODEL_NAME
+
+    assert DEFAULT_MODEL_NAME == "hy4-flash-free"
+    expected_free = {
+        "hy4-flash-free",
+        "iceman-free",
+        "inkling-2-small-free",
+        "longcat-2.5-free",
+        "flint-40b-free",
+        "deepseek-v4.1-flash-free",
+        "nemotron-3.5-super-vl-free",
+        "beam-free",
+        "mimo-v2.6-flash-free",
+        "glm-5.3-flash-free",
+        "big-pickle",
+        "gemma-4-26b-a4b-it",
+    }
+    assert brain.FREE_MODELS == expected_free
+    assert brain.FALLBACK_MODELS == [
+        "deepseek-v4.1-flash-free",
+        "glm-5.3-flash-free",
+        "big-pickle",
+    ]
+    for model in brain.FALLBACK_MODELS:
+        assert brain.is_free_model(model)
+        assert model in brain.FRIENDLY_NAMES
+    assert "hy4-flash-free" in brain.FRIENDLY_NAMES
+    stale = {"x-preview-f-free", "mimo-v2.5-free", "hy3-free", "laguna-s-2.1-free"}
+    assert not (stale & brain.FREE_MODELS)
 
 
 def test_friendly_error_401():
