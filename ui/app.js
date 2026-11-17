@@ -181,6 +181,97 @@ const I18N = {
         audit_reset_failed: 'Audit reset failed',
         security_unavailable: 'security unavailable',
         security_load_failed: 'Could not load security details',
+        tab_chat: 'CHAT',
+        tab_study: 'STUDY',
+        study_source: 'Source under Documents',
+        study_path_label: 'File or folder',
+        study_path_placeholder: 'Documents\\Study\\Biology',
+        study_recursive: 'Include subfolders',
+        study_scan: 'SCAN',
+        study_extracting: 'Reading files...',
+        study_generating: 'Generating deck...',
+        study_loading: 'Loading...',
+        study_preview: 'Extraction preview',
+        study_preview_summary: '{root} · {files} files · {chars} characters',
+        study_truncated: 'Some material was truncated to fit the limits.',
+        study_skipped: 'Skipped',
+        study_mode: 'Deck type',
+        study_flashcards: 'Flashcards',
+        study_quiz: 'Quiz',
+        study_both: 'Both',
+        study_cards: 'Cards',
+        study_questions: 'Questions',
+        study_deck_title: 'Deck title (optional)',
+        study_estimate: 'Up to {cards} cards and {questions} questions.',
+        study_privacy: 'The selected text is sent to your AI provider to generate the deck.',
+        study_generate: 'GENERATE DECK',
+        study_saved_decks: 'Saved decks',
+        study_refresh: 'REFRESH',
+        study_no_decks: 'No saved decks yet.',
+        study_untitled: 'Untitled deck',
+        study_open_deck: 'Open {title}',
+        study_delete_deck: 'Delete {title}',
+        study_deck_row: '{source} · {cards} cards · {questions} questions',
+        study_confirm_delete: 'Delete the deck "{title}"? This cannot be undone.',
+        study_deleted_msg: 'Deck deleted.',
+        study_saved: 'Deck saved.',
+        study_back: 'BACK',
+        study_delete: 'DELETE',
+        study_cards_tab: 'CARDS',
+        study_quiz_tab: 'QUIZ',
+        study_truncated_deck: 'This deck was generated from truncated material.',
+        study_deck_meta: '{source} · {cards} cards · {questions} questions · {date}',
+        study_flip: 'FLIP',
+        study_hide_answer: 'HIDE ANSWER',
+        study_card_position: 'Card {current} of {total}',
+        study_prev: 'PREVIOUS',
+        study_next: 'NEXT',
+        study_shuffle: 'SHUFFLE',
+        study_no_cards: 'No cards in this deck.',
+        study_quiz_position: 'Question {current} of {total}',
+        study_no_questions: 'No questions in this deck.',
+        study_submit: 'SUBMIT ANSWER',
+        study_pick_answer: 'Pick an answer first.',
+        study_correct: 'Correct.',
+        study_incorrect: 'Not quite.',
+        study_answer_was: 'The answer is: {answer}',
+        study_next_question: 'NEXT QUESTION',
+        study_restart: 'RESTART QUIZ',
+        study_score: 'Score: {score} / {total}',
+        study_error_generic: 'The study action failed.',
+        study_err_offline: 'Not connected. Wait for reconnection.',
+        study_err_path_invalid: 'Enter a path inside Documents.',
+        study_err_path_outside: 'That path is outside Documents.',
+        study_err_no_supported: 'No supported study files were found.',
+        study_err_empty: 'No text could be extracted.',
+        study_err_scan_expired: 'The scan expired; scan again.',
+        study_err_scan_unknown: 'That scan is no longer available; scan again.',
+        study_err_busy: 'JARVIS is already working on a study action.',
+        study_err_model_unavailable: 'No AI provider is configured.',
+        study_err_model: 'The AI provider could not generate the deck.',
+        study_err_invalid_output: 'The AI returned an invalid deck; nothing was saved.',
+        study_err_not_found: 'That deck no longer exists.',
+        study_err_db: 'The study database could not be read.',
+        study_err_confirm: 'Delete requires confirmation.',
+        study_err_audit: 'The action was blocked because it could not be audited.',
+        study_err_extract: 'The files could not be read.',
+        study_err_invalid_request: 'The study request was invalid.',
+        study_skip_unsupported: 'Unsupported file type',
+        study_skip_binary: 'Binary file',
+        study_skip_unreadable: 'File could not be read',
+        study_skip_too_large: 'File is too large',
+        study_skip_hidden: 'Hidden or temporary file',
+        study_skip_excluded: 'Excluded folder',
+        study_skip_reparse: 'Link or reparse point skipped',
+        study_skip_depth: 'Folder is too deeply nested',
+        study_skip_max_files: 'File limit reached',
+        study_skip_truncated: 'Text was truncated',
+        study_skip_limit: 'Skip-list limit reached',
+        study_skip_empty: 'No text found',
+        study_skip_no_text: 'PDF has no text layer',
+        study_skip_ocr_unavailable: 'Image OCR is unavailable',
+        study_skip_ocr_failed: 'Image OCR failed',
+        study_skip_other: 'Unknown reason',
     },
     ar: {
         setup_title: 'إعداد جارفيس',
@@ -289,6 +380,97 @@ const I18N = {
         audit_reset_failed: 'فشلت إعادة تعيين السجل',
         security_unavailable: 'الأمان غير متوفر',
         security_load_failed: 'تعذر تحميل تفاصيل الأمان',
+        tab_chat: 'الدردشة',
+        tab_study: 'الدراسة',
+        study_source: 'المصدر داخل المستندات',
+        study_path_label: 'ملف أو مجلد',
+        study_path_placeholder: 'Documents\\Study\\Biology',
+        study_recursive: 'تضمين المجلدات الفرعية',
+        study_scan: 'فحص',
+        study_extracting: 'جارٍ قراءة الملفات...',
+        study_generating: 'جارٍ إنشاء المجموعة...',
+        study_loading: 'جارٍ التحميل...',
+        study_preview: 'معاينة الاستخراج',
+        study_preview_summary: '{root} · {files} ملفات · {chars} حرفاً',
+        study_truncated: 'تم اقتطاع بعض المواد لتطابق الحدود.',
+        study_skipped: 'تم تخطي',
+        study_mode: 'نوع المجموعة',
+        study_flashcards: 'بطاقات',
+        study_quiz: 'اختبار',
+        study_both: 'كلاهما',
+        study_cards: 'بطاقات',
+        study_questions: 'أسئلة',
+        study_deck_title: 'عنوان المجموعة (اختياري)',
+        study_estimate: 'حتى {cards} بطاقة و{questions} سؤالاً.',
+        study_privacy: 'يُرسل النص المحدد إلى مزود الذكاء الاصطناعي لإنشاء المجموعة.',
+        study_generate: 'إنشاء المجموعة',
+        study_saved_decks: 'المجموعات المحفوظة',
+        study_refresh: 'تحديث',
+        study_no_decks: 'لا توجد مجموعات محفوظة بعد.',
+        study_untitled: 'مجموعة بلا عنوان',
+        study_open_deck: 'فتح {title}',
+        study_delete_deck: 'حذف {title}',
+        study_deck_row: '{source} · {cards} بطاقة · {questions} سؤالاً',
+        study_confirm_delete: 'حذف المجموعة "{title}"؟ لا يمكن التراجع.',
+        study_deleted_msg: 'تم حذف المجموعة.',
+        study_saved: 'تم حفظ المجموعة.',
+        study_back: 'رجوع',
+        study_delete: 'حذف',
+        study_cards_tab: 'البطاقات',
+        study_quiz_tab: 'الاختبار',
+        study_truncated_deck: 'أُنشئت هذه المجموعة من مواد مقتطعة.',
+        study_deck_meta: '{source} · {cards} بطاقة · {questions} سؤالاً · {date}',
+        study_flip: 'اقلب',
+        study_hide_answer: 'إخفاء الإجابة',
+        study_card_position: 'بطاقة {current} من {total}',
+        study_prev: 'السابق',
+        study_next: 'التالي',
+        study_shuffle: 'خلط',
+        study_no_cards: 'لا توجد بطاقات في هذه المجموعة.',
+        study_quiz_position: 'سؤال {current} من {total}',
+        study_no_questions: 'لا توجد أسئلة في هذه المجموعة.',
+        study_submit: 'إرسال الإجابة',
+        study_pick_answer: 'اختر إجابة أولاً.',
+        study_correct: 'صحيح.',
+        study_incorrect: 'ليس تماماً.',
+        study_answer_was: 'الإجابة: {answer}',
+        study_next_question: 'السؤال التالي',
+        study_restart: 'إعادة الاختبار',
+        study_score: 'النتيجة: {score} / {total}',
+        study_error_generic: 'فشل إجراء الدراسة.',
+        study_err_offline: 'غير متصل. انتظر إعادة الاتصال.',
+        study_err_path_invalid: 'أدخل مساراً داخل المستندات.',
+        study_err_path_outside: 'هذا المسار خارج المستندات.',
+        study_err_no_supported: 'لم يتم العثور على ملفات دراسة مدعومة.',
+        study_err_empty: 'تعذر استخراج أي نص.',
+        study_err_scan_expired: 'انتهت صلاحية الفحص؛ افحص مرة أخرى.',
+        study_err_scan_unknown: 'هذا الفحص غير متاح؛ افحص مرة أخرى.',
+        study_err_busy: 'جارٍ تنفيذ إجراء دراسة بالفعل.',
+        study_err_model_unavailable: 'لا يوجد مزود ذكاء اصطناعي مضبوط.',
+        study_err_model: 'تعذر على مزود الذكاء الاصطناعي إنشاء المجموعة.',
+        study_err_invalid_output: 'أعاد الذكاء الاصطناعي مجموعة غير صالحة؛ لم يُحفظ شيء.',
+        study_err_not_found: 'هذه المجموعة لم تعد موجودة.',
+        study_err_db: 'تعذر قراءة قاعدة بيانات الدراسة.',
+        study_err_confirm: 'الحذف يتطلب تأكيداً.',
+        study_err_audit: 'تم حظر الإجراء لأنه تعذر تسجيله في السجل.',
+        study_err_extract: 'تعذر قراءة الملفات.',
+        study_err_invalid_request: 'طلب الدراسة غير صالح.',
+        study_skip_unsupported: 'نوع ملف غير مدعوم',
+        study_skip_binary: 'ملف ثنائي',
+        study_skip_unreadable: 'تعذر قراءة الملف',
+        study_skip_too_large: 'الملف كبير جداً',
+        study_skip_hidden: 'ملف مخفي أو مؤقت',
+        study_skip_excluded: 'مجلد مستبعد',
+        study_skip_reparse: 'رابط أو نقطة إعادة تحليل',
+        study_skip_depth: 'المجلد متداخل جداً',
+        study_skip_max_files: 'تم بلوغ حد الملفات',
+        study_skip_truncated: 'تم اقتطاع النص',
+        study_skip_limit: 'تم بلوغ حد قائمة التخطي',
+        study_skip_empty: 'لا يوجد نص',
+        study_skip_no_text: 'PDF بلا طبقة نصية',
+        study_skip_ocr_unavailable: 'التعرف الضوئي على الصور غير متاح',
+        study_skip_ocr_failed: 'فشل التعرف الضوئي',
+        study_skip_other: 'سبب غير معروف',
     },
 };
 
@@ -325,6 +507,7 @@ function applyTranslations() {
     });
     updateWakeBtn(wakeOn);
     updateVoiceStatus(voiceEnrolled);
+    if (typeof refreshStudyTranslations === 'function') refreshStudyTranslations();
 }
 
 async function loadLang() {
@@ -508,12 +691,14 @@ function connect() {
         authRejected = false;
         pendingSends.length = 0;
         clearApproval();
+        resetStudy();
         ws.send(JSON.stringify({ cmd: 'auth', token: JARVIS_TOKEN }));
     };
     ws.onmessage = onMessage;
     ws.onclose = (e) => {
         WSAUTHED = false;
         clearApproval();
+        resetStudy();
         if (e && e.code === 4001) {
             document.getElementById('status').textContent = t('session_replaced');
             showToast(t('session_replaced'), 'warning', 10000);
@@ -553,10 +738,12 @@ function onMessage(ev) {
         case 'session_revoked':
             WSAUTHED = false;
             clearApproval();
+            resetStudy();
             break;
         case 'session_inactive':
             WSAUTHED = false;
             clearApproval();
+            resetStudy();
             showToast(t('session_inactive'), 'warning');
             break;
         case 'state':
@@ -627,6 +814,59 @@ function onMessage(ev) {
         case 'voice_rejected':
             addMsg(t('unrecognized_voice'), 'jarvis');
             showToast(t('access_denied'), 'warning');
+            break;
+        case 'study_status':
+            if (msg.op_id !== studyOpId) break;
+            setStudyBusy(true);
+            studyStatusLine.textContent = msg.stage === 'generating'
+                ? t('study_generating') : t('study_extracting');
+            break;
+        case 'study_scan_result':
+            if (msg.op_id !== studyOpId) break;
+            studyScan = msg;
+            setStudyBusy(false);
+            renderStudyPreview(msg);
+            break;
+        case 'study_generate_result':
+            if (msg.op_id !== studyOpId) break;
+            studyStatusLine.textContent = t('study_saved');
+            showToast(t('study_saved'), 'success');
+            openStudyDeck(msg.deck && msg.deck.id);
+            break;
+        case 'study_list_result':
+            if (msg.op_id !== studyOpId) break;
+            setStudyBusy(false);
+            renderStudyDeckList(msg.decks);
+            break;
+        case 'study_deck':
+            if (msg.op_id !== studyOpId) break;
+            renderStudyDeck(msg.deck);
+            break;
+        case 'study_deleted':
+            if (msg.op_id !== studyOpId) break;
+            setStudyBusy(false);
+            hideStudyDeck();
+            studyStatusLine.textContent = t('study_deleted_msg');
+            loadStudyDecks(true);
+            break;
+        case 'study_error':
+            if (msg.op_id !== studyOpId) break;
+            if (msg.code !== 'study_busy') setStudyBusy(false);
+            {
+                const text = studyErrorText(msg.code, msg.message);
+                studyStatusLine.textContent = text;
+                showToast(text, 'error', 6000);
+            }
+            if (msg.stage === 'scan' && msg.code !== 'study_busy') {
+                studyScan = null;
+                studyPreview.classList.add('hidden');
+                syncStudyControls();
+            }
+            if (msg.code === 'study_scan_expired' || msg.code === 'study_scan_unknown') {
+                studyScan = null;
+                studyPreview.classList.add('hidden');
+                syncStudyControls();
+            }
             break;
         case 'error':
             hideEnrollBanner();
@@ -872,6 +1112,409 @@ async function loadSecurityPanel() {
 }
 
 auditResetBtn.addEventListener('click', auditReset);
+
+/* === STUDY === */
+const tabChat = document.getElementById('tabChat');
+const tabStudy = document.getElementById('tabStudy');
+const chatView = document.getElementById('chatView');
+const studyView = document.getElementById('studyView');
+const studySourcePanel = document.getElementById('studySourcePanel');
+const studyLibraryPanel = document.getElementById('studyLibraryPanel');
+const studyPathInput = document.getElementById('studyPathInput');
+const studyRecursive = document.getElementById('studyRecursive');
+const studyScanBtn = document.getElementById('studyScanBtn');
+const studyStatusLine = document.getElementById('studyStatusLine');
+const studyPreview = document.getElementById('studyPreview');
+const studyPreviewSummary = document.getElementById('studyPreviewSummary');
+const studyPreviewList = document.getElementById('studyPreviewList');
+const studySkippedList = document.getElementById('studySkippedList');
+const studyMode = document.getElementById('studyMode');
+const studyCardsInput = document.getElementById('studyCards');
+const studyQuestionsInput = document.getElementById('studyQuestions');
+const studyTitleInput = document.getElementById('studyTitleInput');
+const studyEstimate = document.getElementById('studyEstimate');
+const studyGenerateBtn = document.getElementById('studyGenerateBtn');
+const studyRefreshBtn = document.getElementById('studyRefreshBtn');
+const studyDeckListEl = document.getElementById('studyDeckList');
+const studyDeckView = document.getElementById('studyDeckView');
+const studyDeckTitle = document.getElementById('studyDeckTitle');
+const studyDeckMeta = document.getElementById('studyDeckMeta');
+const studyDeckWarning = document.getElementById('studyDeckWarning');
+const studyBackBtn = document.getElementById('studyBackBtn');
+const studyDeleteBtn = document.getElementById('studyDeleteBtn');
+const studyCardsTab = document.getElementById('studyCardsTab');
+const studyQuizTab = document.getElementById('studyQuizTab');
+const studyCardPanel = document.getElementById('studyCardPanel');
+const studyQuizPanel = document.getElementById('studyQuizPanel');
+
+let studyOpId = null;
+let studyScan = null;
+let studyBusy = false;
+let studyDeck = null;
+let studyDecks = [];
+
+const STUDY_ERROR_KEYS = {
+    study_path_invalid: 'study_err_path_invalid',
+    study_path_outside: 'study_err_path_outside',
+    study_no_supported_files: 'study_err_no_supported',
+    study_empty_text: 'study_err_empty',
+    study_scan_expired: 'study_err_scan_expired',
+    study_scan_unknown: 'study_err_scan_unknown',
+    study_busy: 'study_err_busy',
+    study_model_unavailable: 'study_err_model_unavailable',
+    study_model_error: 'study_err_model',
+    study_invalid_output: 'study_err_invalid_output',
+    study_not_found: 'study_err_not_found',
+    study_db_error: 'study_err_db',
+    study_confirm_required: 'study_err_confirm',
+    study_audit_unavailable: 'study_err_audit',
+    study_extract_failed: 'study_err_extract',
+    study_invalid_request: 'study_err_invalid_request',
+};
+
+const STUDY_SKIP_KEYS = {
+    unsupported: 'study_skip_unsupported',
+    binary: 'study_skip_binary',
+    unreadable: 'study_skip_unreadable',
+    too_large: 'study_skip_too_large',
+    hidden: 'study_skip_hidden',
+    excluded: 'study_skip_excluded',
+    reparse_point: 'study_skip_reparse',
+    depth_limit: 'study_skip_depth',
+    max_files: 'study_skip_max_files',
+    truncated: 'study_skip_truncated',
+    skipped_limit: 'study_skip_limit',
+    empty_text: 'study_skip_empty',
+    no_text_layer: 'study_skip_no_text',
+    ocr_unavailable: 'study_skip_ocr_unavailable',
+    ocr_failed: 'study_skip_ocr_failed',
+};
+
+function studyErrorText(code, message) {
+    const key = STUDY_ERROR_KEYS[code];
+    return key ? t(key, null, message || code) : t('study_error_generic');
+}
+
+function studySkipText(reason) {
+    const key = STUDY_SKIP_KEYS[reason];
+    return key ? t(key) : t('study_skip_other');
+}
+
+function newStudyOpId() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+        return window.crypto.randomUUID().replace(/-/g, '');
+    }
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+}
+
+function sendStudy(cmd, payload) {
+    if (!WSAUTHED) {
+        showToast(t('study_err_offline'), 'warning');
+        return null;
+    }
+    const opId = newStudyOpId();
+    studyOpId = opId;
+    send({ cmd, ...payload, op_id: opId });
+    return opId;
+}
+
+function showStudyView() {
+    chatView.classList.add('hidden');
+    studyView.classList.remove('hidden');
+    tabChat.classList.remove('active');
+    tabStudy.classList.add('active');
+    tabChat.setAttribute('aria-selected', 'false');
+    tabStudy.setAttribute('aria-selected', 'true');
+    document.getElementById('app').classList.add('study-mode');
+    loadStudyDecks();
+}
+
+function showChatView() {
+    studyView.classList.add('hidden');
+    chatView.classList.remove('hidden');
+    tabStudy.classList.remove('active');
+    tabChat.classList.add('active');
+    tabStudy.setAttribute('aria-selected', 'false');
+    tabChat.setAttribute('aria-selected', 'true');
+    document.getElementById('app').classList.remove('study-mode');
+}
+
+function syncStudyControls() {
+    const mode = studyMode.value;
+    const cards = Number(studyCardsInput.value);
+    const questions = Number(studyQuestionsInput.value);
+    const cardsOk = Number.isInteger(cards) && cards >= 5 && cards <= 40;
+    const questionsOk = Number.isInteger(questions) && questions >= 3 && questions <= 20;
+    studyMode.disabled = studyBusy;
+    studyCardsInput.disabled = studyBusy || mode === 'quiz';
+    studyQuestionsInput.disabled = studyBusy || mode === 'flashcards';
+    studyTitleInput.disabled = studyBusy;
+    const valid = (mode === 'quiz' || cardsOk) && (mode === 'flashcards' || questionsOk);
+    studyGenerateBtn.disabled = studyBusy || !studyScan || !valid;
+    studyEstimate.textContent = t('study_estimate', {
+        cards: mode === 'quiz' ? 0 : (cardsOk ? cards : 0),
+        questions: mode === 'flashcards' ? 0 : (questionsOk ? questions : 0),
+    });
+}
+
+function setStudyBusy(busy) {
+    studyBusy = busy;
+    studyScanBtn.disabled = busy;
+    studyRefreshBtn.disabled = busy;
+    studyPathInput.disabled = busy;
+    studyRecursive.disabled = busy;
+    syncStudyControls();
+}
+
+function resetStudy() {
+    studyOpId = null;
+    studyScan = null;
+    studyBusy = false;
+    studyDecks = [];
+    studyStatusLine.textContent = '';
+    studyPreview.classList.add('hidden');
+    studyPreviewSummary.textContent = '';
+    studyPreviewList.textContent = '';
+    studySkippedList.textContent = '';
+    studyDeckListEl.textContent = '';
+    hideStudyDeck();
+    setStudyBusy(false);
+}
+
+function loadStudyDecks(force) {
+    if (!WSAUTHED) return;
+    if (studyBusy && force !== true) return;
+    sendStudy('study_list', {});
+}
+
+function scanStudy() {
+    const path = studyPathInput.value.trim();
+    if (!path) {
+        const text = t('study_err_path_invalid');
+        studyStatusLine.textContent = text;
+        showToast(text, 'error');
+        return;
+    }
+    studyScan = null;
+    studyPreview.classList.add('hidden');
+    setStudyBusy(true);
+    studyStatusLine.textContent = t('study_extracting');
+    sendStudy('study_scan', { path, recursive: studyRecursive.checked });
+}
+
+function generateStudyDeck() {
+    if (!studyScan) return;
+    const mode = studyMode.value;
+    const payload = { scan_id: studyScan.scan_id, mode };
+    if (mode !== 'quiz') payload.cards = Number(studyCardsInput.value);
+    if (mode !== 'flashcards') payload.questions = Number(studyQuestionsInput.value);
+    const title = studyTitleInput.value.trim();
+    if (title) payload.title = title;
+    setStudyBusy(true);
+    studyStatusLine.textContent = t('study_generating');
+    sendStudy('study_generate', payload);
+}
+
+function renderStudyPreview(msg) {
+    studyPreviewSummary.textContent = t('study_preview_summary', {
+        root: msg.root || '',
+        files: Array.isArray(msg.documents) ? msg.documents.length : 0,
+        chars: Number.isFinite(Number(msg.total_chars)) ? Number(msg.total_chars) : 0,
+    });
+    studyPreviewList.textContent = '';
+    const documents = Array.isArray(msg.documents) ? msg.documents : [];
+    for (const doc of documents) {
+        const row = document.createElement('div');
+        row.className = 'studyItem';
+        row.textContent = `${doc.path || '?'} · ${doc.format || '?'} · ${Number(doc.chars) || 0}`;
+        studyPreviewList.appendChild(row);
+    }
+    studySkippedList.textContent = '';
+    const skipped = Array.isArray(msg.skipped) ? msg.skipped : [];
+    if (skipped.length) {
+        const title = document.createElement('div');
+        title.className = 'studyItem studySkippedTitle';
+        title.textContent = t('study_skipped');
+        studySkippedList.appendChild(title);
+    }
+    for (const item of skipped) {
+        const row = document.createElement('div');
+        row.className = 'studyItem studySkipped';
+        row.textContent = `${item.path || '?'} — ${studySkipText(item.reason)}`;
+        studySkippedList.appendChild(row);
+    }
+    if (msg.truncated) {
+        const row = document.createElement('div');
+        row.className = 'studyWarning';
+        row.textContent = t('study_truncated');
+        studySkippedList.appendChild(row);
+    }
+    if (!documents.length) {
+        const row = document.createElement('div');
+        row.className = 'studyItem';
+        row.textContent = skipped.length ? t('study_err_no_supported') : t('study_err_empty');
+        studySkippedList.appendChild(row);
+    }
+    studyPreview.classList.remove('hidden');
+    syncStudyControls();
+}
+
+function renderStudyDeckList(decks) {
+    studyDecks = Array.isArray(decks) ? decks : [];
+    studyDeckListEl.textContent = '';
+    if (!studyDecks.length) {
+        const row = document.createElement('div');
+        row.className = 'studyItem';
+        row.textContent = t('study_no_decks');
+        studyDeckListEl.appendChild(row);
+        return;
+    }
+    for (const deck of studyDecks) {
+        if (!deck || typeof deck.id !== 'string' || !deck.id) continue;
+        const row = document.createElement('div');
+        row.className = 'studyDeckRow';
+        const open = document.createElement('button');
+        open.className = 'studyDeckOpen';
+        open.textContent = deck.title || t('study_untitled');
+        open.setAttribute('aria-label', t('study_open_deck', { title: deck.title || '' }));
+        open.addEventListener('click', () => openStudyDeck(deck.id));
+        const meta = document.createElement('div');
+        meta.className = 'hint';
+        meta.textContent = t('study_deck_row', {
+            source: deck.source_path || '',
+            cards: Number(deck.card_count) || 0,
+            questions: Number(deck.question_count) || 0,
+        });
+        const del = document.createElement('button');
+        del.className = 'studySmall danger';
+        del.textContent = t('study_delete');
+        del.setAttribute('aria-label', t('study_delete_deck', { title: deck.title || '' }));
+        del.addEventListener('click', () => deleteStudyDeck(deck.id, deck.title || ''));
+        row.appendChild(open);
+        row.appendChild(del);
+        row.appendChild(meta);
+        studyDeckListEl.appendChild(row);
+    }
+}
+
+function openStudyDeck(deckId) {
+    if (typeof deckId !== 'string' || !deckId) return;
+    setStudyBusy(true);
+    studyStatusLine.textContent = t('study_loading');
+    sendStudy('study_get', { deck_id: deckId });
+}
+
+function deleteStudyDeck(deckId, title) {
+    if (typeof deckId !== 'string' || !deckId) return;
+    if (!confirm(t('study_confirm_delete', { title }))) return;
+    setStudyBusy(true);
+    sendStudy('study_delete', { deck_id: deckId, confirm: true });
+}
+
+function showStudyDeckPanel(name) {
+    const cards = name !== 'quiz';
+    studyCardPanel.classList.toggle('hidden', !cards);
+    studyQuizPanel.classList.toggle('hidden', cards);
+    studyCardsTab.classList.toggle('active', cards);
+    studyQuizTab.classList.toggle('active', !cards);
+    studyCardsTab.setAttribute('aria-selected', String(cards));
+    studyQuizTab.setAttribute('aria-selected', String(!cards));
+}
+
+function hideStudyDeck() {
+    studyDeck = null;
+    studyDeckView.classList.add('hidden');
+    studySourcePanel.classList.remove('hidden');
+    studyLibraryPanel.classList.remove('hidden');
+    studyDeckTitle.textContent = '';
+    studyDeckMeta.textContent = '';
+    studyDeckWarning.classList.add('hidden');
+}
+
+function renderStudyDeck(deck) {
+    if (!deck || typeof deck.id !== 'string' || !deck.id) return;
+    studyDeck = deck;
+    studyDeckTitle.textContent = deck.title || t('study_untitled');
+    studyDeckMeta.textContent = t('study_deck_meta', {
+        source: deck.source_path || '',
+        cards: Array.isArray(deck.cards) ? deck.cards.length : 0,
+        questions: Array.isArray(deck.quiz) ? deck.quiz.length : 0,
+        date: deck.created_at || '',
+    });
+    const summary = deck.source_summary || {};
+    studyDeckWarning.classList.toggle('hidden', summary.truncated !== true);
+    const hasCards = Array.isArray(deck.cards) && deck.cards.length > 0;
+    const hasQuiz = Array.isArray(deck.quiz) && deck.quiz.length > 0;
+    studyCardsTab.classList.toggle('hidden', !hasCards);
+    studyQuizTab.classList.toggle('hidden', !hasQuiz);
+    showStudyDeckPanel(hasCards ? 'cards' : 'quiz');
+    studySourcePanel.classList.add('hidden');
+    studyLibraryPanel.classList.add('hidden');
+    studyDeckView.classList.remove('hidden');
+    setStudyBusy(false);
+    if (typeof renderStudyCards === 'function') renderStudyCards();
+    if (typeof renderStudyQuiz === 'function') renderStudyQuiz();
+}
+
+function refreshStudyTranslations() {
+    if (studyScan) renderStudyPreview(studyScan);
+    renderStudyDeckList(studyDecks);
+    if (studyDeck) {
+        studyDeckTitle.textContent = studyDeck.title || t('study_untitled');
+        studyDeckMeta.textContent = t('study_deck_meta', {
+            source: studyDeck.source_path || '',
+            cards: Array.isArray(studyDeck.cards) ? studyDeck.cards.length : 0,
+            questions: Array.isArray(studyDeck.quiz) ? studyDeck.quiz.length : 0,
+            date: studyDeck.created_at || '',
+        });
+        if (typeof renderStudyCard === 'function') renderStudyCard();
+        if (typeof renderStudyQuestion === 'function') renderStudyQuestion();
+    }
+    syncStudyControls();
+}
+
+tabChat.addEventListener('click', showChatView);
+tabStudy.addEventListener('click', showStudyView);
+document.getElementById('viewTabs').addEventListener('keydown', e => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    if (tabChat.classList.contains('active')) {
+        showStudyView();
+        tabStudy.focus();
+    } else {
+        showChatView();
+        tabChat.focus();
+    }
+});
+
+studyScanBtn.addEventListener('click', scanStudy);
+studyGenerateBtn.addEventListener('click', generateStudyDeck);
+studyRefreshBtn.addEventListener('click', () => loadStudyDecks(true));
+studyBackBtn.addEventListener('click', () => {
+    hideStudyDeck();
+    loadStudyDecks();
+});
+studyDeleteBtn.addEventListener('click', () => {
+    if (studyDeck) deleteStudyDeck(studyDeck.id, studyDeck.title || '');
+});
+studyCardsTab.addEventListener('click', () => showStudyDeckPanel('cards'));
+studyQuizTab.addEventListener('click', () => showStudyDeckPanel('quiz'));
+document.getElementById('studyDeckTabs').addEventListener('keydown', e => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    if (studyCardsTab.classList.contains('active')) {
+        showStudyDeckPanel('quiz');
+        studyQuizTab.focus();
+    } else {
+        showStudyDeckPanel('cards');
+        studyCardsTab.focus();
+    }
+});
+studyMode.addEventListener('change', syncStudyControls);
+studyCardsInput.addEventListener('input', syncStudyControls);
+studyQuestionsInput.addEventListener('input', syncStudyControls);
+studyTitleInput.addEventListener('input', syncStudyControls);
+syncStudyControls();
 
 /* === TTS === */
 const voiceSelect = document.getElementById('voiceSelect');
