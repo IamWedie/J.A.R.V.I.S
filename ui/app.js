@@ -1468,7 +1468,9 @@ function refreshStudyTranslations() {
             date: studyDeck.created_at || '',
         });
         if (typeof renderStudyCard === 'function') renderStudyCard();
-        if (typeof renderStudyQuestion === 'function') renderStudyQuestion();
+        if (typeof renderStudyQuestion === 'function' && !studyQuizAnswered) {
+            renderStudyQuestion();
+        }
     }
     syncStudyControls();
 }
@@ -1515,6 +1517,231 @@ studyCardsInput.addEventListener('input', syncStudyControls);
 studyQuestionsInput.addEventListener('input', syncStudyControls);
 studyTitleInput.addEventListener('input', syncStudyControls);
 syncStudyControls();
+
+const studyCardEl = document.getElementById('studyCard');
+const studyCardFront = document.getElementById('studyCardFront');
+const studyCardBack = document.getElementById('studyCardBack');
+const studyCardFlipBtn = document.getElementById('studyCardFlipBtn');
+const studyCardPosition = document.getElementById('studyCardPosition');
+const studyPrevCard = document.getElementById('studyPrevCard');
+const studyNextCard = document.getElementById('studyNextCard');
+const studyShuffleBtn = document.getElementById('studyShuffleBtn');
+const studyQuizPosition = document.getElementById('studyQuizPosition');
+const studyQuizQuestion = document.getElementById('studyQuizQuestion');
+const studyQuizOptions = document.getElementById('studyQuizOptions');
+const studyQuizSubmit = document.getElementById('studyQuizSubmit');
+const studyQuizFeedback = document.getElementById('studyQuizFeedback');
+const studyQuizExplanation = document.getElementById('studyQuizExplanation');
+const studyQuizNext = document.getElementById('studyQuizNext');
+const studyQuizScore = document.getElementById('studyQuizScore');
+const studyQuizRestart = document.getElementById('studyQuizRestart');
+
+let studyCardOrder = [];
+let studyCardIndex = 0;
+let studyCardFlipped = false;
+let studyQuizIndex = 0;
+let studyQuizCorrect = 0;
+let studyQuizAnswered = false;
+
+function studyDeckCards() {
+    return studyDeck && Array.isArray(studyDeck.cards) ? studyDeck.cards : [];
+}
+
+function studyDeckQuiz() {
+    return studyDeck && Array.isArray(studyDeck.quiz) ? studyDeck.quiz : [];
+}
+
+function renderStudyCards() {
+    studyCardOrder = studyDeckCards().map((_, index) => index);
+    studyCardIndex = 0;
+    studyCardFlipped = false;
+    renderStudyCard();
+}
+
+function renderStudyCard() {
+    const cards = studyDeckCards();
+    if (!cards.length) {
+        studyCardPosition.textContent = '';
+        studyCardFront.textContent = t('study_no_cards');
+        studyCardBack.textContent = '';
+        studyCardFront.classList.remove('hidden');
+        studyCardBack.classList.add('hidden');
+        studyCardFlipBtn.disabled = true;
+        studyPrevCard.disabled = true;
+        studyNextCard.disabled = true;
+        studyShuffleBtn.disabled = true;
+        return;
+    }
+    studyCardFlipBtn.disabled = false;
+    studyShuffleBtn.disabled = cards.length < 2;
+    studyPrevCard.disabled = studyCardIndex <= 0;
+    studyNextCard.disabled = studyCardIndex >= cards.length - 1;
+    const card = cards[studyCardOrder[studyCardIndex]];
+    studyCardPosition.textContent = t('study_card_position', {
+        current: studyCardIndex + 1,
+        total: cards.length,
+    });
+    studyCardFront.textContent = card.front || '';
+    studyCardBack.textContent = card.back || '';
+    studyCardFront.classList.toggle('hidden', studyCardFlipped);
+    studyCardBack.classList.toggle('hidden', !studyCardFlipped);
+    studyCardFlipBtn.textContent = studyCardFlipped
+        ? t('study_hide_answer') : t('study_flip');
+}
+
+function flipStudyCard() {
+    if (!studyDeckCards().length) return;
+    studyCardFlipped = !studyCardFlipped;
+    renderStudyCard();
+}
+
+function moveStudyCard(delta) {
+    const total = studyDeckCards().length;
+    if (!total) return;
+    studyCardIndex = Math.min(Math.max(studyCardIndex + delta, 0), total - 1);
+    studyCardFlipped = false;
+    renderStudyCard();
+}
+
+function shuffleStudyCards() {
+    const order = studyCardOrder;
+    for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [order[i], order[j]] = [order[j], order[i]];
+    }
+    studyCardIndex = 0;
+    studyCardFlipped = false;
+    renderStudyCard();
+}
+
+function renderStudyQuiz() {
+    studyQuizIndex = 0;
+    studyQuizCorrect = 0;
+    studyQuizAnswered = false;
+    renderStudyQuestion();
+}
+
+function renderStudyQuestion() {
+    const quiz = studyDeckQuiz();
+    studyQuizAnswered = false;
+    studyQuizOptions.textContent = '';
+    studyQuizFeedback.textContent = '';
+    studyQuizFeedback.className = 'studyQuizFeedback';
+    studyQuizExplanation.textContent = '';
+    studyQuizNext.classList.add('hidden');
+    studyQuizRestart.classList.add('hidden');
+    studyQuizSubmit.classList.remove('hidden');
+    studyQuizSubmit.disabled = false;
+    studyQuizScore.textContent = '';
+    if (!quiz.length) {
+        studyQuizPosition.textContent = '';
+        studyQuizQuestion.textContent = t('study_no_questions');
+        studyQuizSubmit.classList.add('hidden');
+        return;
+    }
+    if (studyQuizIndex >= quiz.length) {
+        finishStudyQuiz();
+        return;
+    }
+    const item = quiz[studyQuizIndex];
+    studyQuizPosition.textContent = t('study_quiz_position', {
+        current: studyQuizIndex + 1,
+        total: quiz.length,
+    });
+    studyQuizQuestion.textContent = item.question || '';
+    const options = Array.isArray(item.options) ? item.options : [];
+    options.forEach((option, index) => {
+        const label = document.createElement('label');
+        label.className = 'studyQuizOption';
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = 'studyQuizChoice';
+        input.value = String(index);
+        const span = document.createElement('span');
+        span.textContent = option;
+        label.appendChild(input);
+        label.appendChild(span);
+        studyQuizOptions.appendChild(label);
+    });
+}
+
+function submitStudyAnswer() {
+    if (studyQuizAnswered) return;
+    const quiz = studyDeckQuiz();
+    if (!quiz.length || studyQuizIndex >= quiz.length) return;
+    const item = quiz[studyQuizIndex];
+    const selected = studyQuizOptions.querySelector('input[name="studyQuizChoice"]:checked');
+    if (!selected) {
+        showToast(t('study_pick_answer'), 'warning');
+        return;
+    }
+    const choice = Number(selected.value);
+    const correct = Number(item.answer_index);
+    studyQuizAnswered = true;
+    for (const input of studyQuizOptions.querySelectorAll('input')) {
+        input.disabled = true;
+    }
+    studyQuizSubmit.classList.add('hidden');
+    const labels = studyQuizOptions.querySelectorAll('label');
+    if (labels[correct]) labels[correct].classList.add('correct');
+    if (choice !== correct && labels[choice]) labels[choice].classList.add('wrong');
+    const answer = Array.isArray(item.options) && item.options[correct] !== undefined
+        ? item.options[correct] : '';
+    if (choice === correct) {
+        studyQuizCorrect += 1;
+        studyQuizFeedback.textContent = t('study_correct');
+        studyQuizFeedback.className = 'studyQuizFeedback correct';
+    } else {
+        studyQuizFeedback.textContent = t('study_incorrect');
+        studyQuizFeedback.className = 'studyQuizFeedback incorrect';
+    }
+    const answerLine = answer ? t('study_answer_was', { answer }) : '';
+    studyQuizExplanation.textContent = [answerLine, item.explanation || '']
+        .filter(Boolean).join(' ');
+    studyQuizNext.classList.remove('hidden');
+}
+
+function nextStudyQuestion() {
+    if (!studyQuizAnswered) return;
+    studyQuizIndex += 1;
+    renderStudyQuestion();
+}
+
+function finishStudyQuiz() {
+    const total = studyDeckQuiz().length;
+    studyQuizPosition.textContent = '';
+    studyQuizQuestion.textContent = '';
+    studyQuizOptions.textContent = '';
+    studyQuizSubmit.classList.add('hidden');
+    studyQuizNext.classList.add('hidden');
+    studyQuizExplanation.textContent = '';
+    studyQuizFeedback.textContent = '';
+    studyQuizFeedback.className = 'studyQuizFeedback';
+    studyQuizScore.textContent = t('study_score', {
+        score: studyQuizCorrect,
+        total,
+    });
+    studyQuizRestart.classList.remove('hidden');
+}
+
+function restartStudyQuiz() {
+    renderStudyQuiz();
+}
+
+studyCardEl.addEventListener('click', flipStudyCard);
+studyCardEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        flipStudyCard();
+    }
+});
+studyCardFlipBtn.addEventListener('click', flipStudyCard);
+studyPrevCard.addEventListener('click', () => moveStudyCard(-1));
+studyNextCard.addEventListener('click', () => moveStudyCard(1));
+studyShuffleBtn.addEventListener('click', shuffleStudyCards);
+studyQuizSubmit.addEventListener('click', submitStudyAnswer);
+studyQuizNext.addEventListener('click', nextStudyQuestion);
+studyQuizRestart.addEventListener('click', restartStudyQuiz);
 
 /* === TTS === */
 const voiceSelect = document.getElementById('voiceSelect');
